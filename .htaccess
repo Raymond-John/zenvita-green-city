@@ -18,7 +18,7 @@
     # Skip rewriting the root index.php shim (it includes public/index.php)
     RewriteRule ^index\.php$ - [L]
 
-    # Internally serve everything else from public/ (Laravel-style).
+    # Internally serve everything else from public/ (document root).
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
 

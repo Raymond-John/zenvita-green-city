@@ -1,0 +1,23 @@
+---
+description: Core PHP app with Laravel-inspired folders only — never treat as Laravel
+alwaysApply: true
+---
+
+# Core PHP + Laravel-like folders
+
+This repository is **core / plain PHP**, not a Laravel application.
+
+## Do
+
+- Keep a Laravel-**inspired** folder layout (`app/`, `bootstrap/`, `config/`, `database/`, `public/`, `resources/`, `routes/`, `storage/`)
+- Put shared logic in `app/Support`, `app/Services`, and (when useful) thin files under `app/Http/Controllers`
+- Keep the web document root in `public/`
+- Use plain PHP, PDO, sessions, and the existing `public/api/*.php` endpoints
+
+## Do not
+
+- Do not install or assume Laravel, Artisan, Eloquent, Blade, Vite, or `composer create-project laravel/laravel`
+- Do not rewrite the app into a Laravel framework unless the user explicitly asks
+- Do not describe the project as “a Laravel app”
+
+When adding features, extend the core PHP codebase inside this folder layout.

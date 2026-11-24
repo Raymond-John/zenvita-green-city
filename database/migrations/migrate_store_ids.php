@@ -2,9 +2,9 @@
 /**
  * Assigns a store ID (member_code) to every store user.
  * Format: ZGS00001, ZGS00002, ...
- * Run: php database/migrate_store_ids.php
+ * Run: php database/migrations/migrate_store_ids.php
  */
-require_once __DIR__ . '/../public/api/bootstrap.php';
+require_once dirname(__DIR__, 2) . '/bootstrap/app.php';
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);

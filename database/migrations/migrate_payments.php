@@ -1,9 +1,9 @@
 <?php
 /**
  * Creates registration_payments table for Paystack pay-before-register.
- * Run: php database/migrate_payments.php
+ * Run: php database/migrations/migrate_payments.php
  */
-require_once __DIR__ . '/../public/api/bootstrap.php';
+require_once dirname(__DIR__, 2) . '/bootstrap/app.php';
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);

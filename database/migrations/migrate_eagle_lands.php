@@ -1,9 +1,9 @@
 <?php
 /**
  * Adds Eagle Lands & Properties reserve wallet + withdrawal reserve tracking.
- * Run: php database/migrate_eagle_lands.php
+ * Run: php database/migrations/migrate_eagle_lands.php
  */
-require_once __DIR__ . '/../public/api/bootstrap.php';
+require_once dirname(__DIR__, 2) . '/bootstrap/app.php';
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);

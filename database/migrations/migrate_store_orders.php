@@ -1,9 +1,9 @@
 <?php
 /**
  * Adds store role + stores/orders/notifications tables.
- * Run: php database/migrate_store_orders.php
+ * Run: php database/migrations/migrate_store_orders.php
  */
-require_once __DIR__ . '/../public/api/bootstrap.php';
+require_once dirname(__DIR__, 2) . '/bootstrap/app.php';
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);

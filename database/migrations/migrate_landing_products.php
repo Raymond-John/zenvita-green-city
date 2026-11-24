@@ -1,9 +1,9 @@
 <?php
 /**
  * Adds product landing fields + homepage features table.
- * Run: php database/migrate_landing_products.php
+ * Run: php database/migrations/migrate_landing_products.php
  */
-require_once __DIR__ . '/../public/api/bootstrap.php';
+require_once dirname(__DIR__, 2) . '/bootstrap/app.php';
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
