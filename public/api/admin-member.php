@@ -1,0 +1,55 @@
+<?php
+require __DIR__ . '/bootstrap.php';
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    json_out(['ok' => false, 'error' => 'Use POST.'], 405);
+}
+
+require_user('admin');
+$body = request_body();
+$code = trim((string) ($body['memberCode'] ?? ''));
+$name = trim((string) ($body['name'] ?? ''));
+$email = trim((string) ($body['email'] ?? ''));
+$phone = trim((string) ($body['phone'] ?? ''));
+$packageName = trim((string) ($body['package'] ?? ''));
+$status = strtolower(trim((string) ($body['status'] ?? '')));
+
+if ($code === '' || $name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    json_out(['ok' => false, 'error' => 'Enter the member name and a valid email.'], 422);
+}
+if (!in_array($status, ['active', 'inactive', 'suspended'], true)) {
+    json_out(['ok' => false, 'error' => 'Choose a valid status.'], 422);
+}
+
+$pdo = db();
+$member = $pdo->prepare('SELECT id FROM users WHERE member_code = ? AND role = \'member\'');
+$member->execute([$code]);
+$userId = (int) $member->fetchColumn();
+if (!$userId) {
+    json_out(['ok' => false, 'error' => 'That member was not found.'], 404);
+}
+
+$package = $pdo->prepare('SELECT id, pv FROM packages WHERE name = ?');
+$package->execute([$packageName]);
+$packageRow = $package->fetch();
+if (!$packageRow) {
+    json_out(['ok' => false, 'error' => 'Choose a package from the list.'], 422);
+}
+
+$taken = $pdo->prepare('SELECT id FROM users WHERE email = ? AND id <> ?');
+$taken->execute([$email, $userId]);
+if ($taken->fetch()) {
+    json_out(['ok' => false, 'error' => 'That email is already used by another account.'], 422);
+}
+
+$parts = preg_split('/\s+/', $name, 2);
+$first = $parts[0];
+$last = $parts[1] ?? '';
+
+$pdo->prepare(
+    'UPDATE users
+     SET first_name = ?, last_name = ?, email = ?, phone = ?, package_id = ?, personal_pv = ?, status = ?
+     WHERE id = ?'
+)->execute([$first, $last, $email, $phone, $packageRow['id'], $packageRow['pv'], $status, $userId]);
+
+json_out(['ok' => true]);

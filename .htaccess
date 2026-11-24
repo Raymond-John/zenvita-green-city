@@ -1,0 +1,25 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase "/Zenita backend/zenvita_green_city/"
+
+    # Browser asked for /public/... → redirect to the clean URL.
+    RewriteCond %{THE_REQUEST} \s/+Zenita\%20backend/zenvita_green_city/public/([^\s?]*) [NC]
+    RewriteRule ^ /Zenita\%20backend/zenvita_green_city/%1 [R=301,L,NE]
+
+    RewriteCond %{THE_REQUEST} \s/+Zenita\ backend/zenvita_green_city/public/([^\s?]*) [NC]
+    RewriteRule ^ /Zenita\%20backend/zenvita_green_city/%1 [R=301,L,NE]
+
+    # Homepage → public landing page
+    RewriteRule ^$ public/index.php [L]
+
+    # Do not re-rewrite requests already under public/
+    RewriteRule ^public/ - [L]
+
+    # Skip rewriting the root index.php shim (it includes public/index.php)
+    RewriteRule ^index\.php$ - [L]
+
+    # Internally serve everything else from public/ (Laravel-style).
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+DirectoryIndex index.php public/index.php

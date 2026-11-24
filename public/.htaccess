@@ -1,0 +1,16 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # If URL still contains /public/, bounce to the clean path.
+    RewriteCond %{THE_REQUEST} \s/+Zenita\%20backend/zenvita_green_city/public/([^\s?]*) [NC]
+    RewriteRule ^ /Zenita\%20backend/zenvita_green_city/%1 [R=301,L,NE]
+
+    RewriteCond %{THE_REQUEST} \s/+Zenita\ backend/zenvita_green_city/public/([^\s?]*) [NC]
+    RewriteRule ^ /Zenita\%20backend/zenvita_green_city/%1 [R=301,L,NE]
+
+    # Extensionless URLs → matching .php file (internal only, no redirect)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}.php -f
+    RewriteRule ^(.+)$ $1.php [L]
+</IfModule>

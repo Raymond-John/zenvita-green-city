@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Zenvita Green City">
+  <rect width="64" height="64" fill="#1B3329"/>
+  <path d="M0 0h16v3H3v13H0V0zm64 0v16h-3V3H48V0h16zM0 64V48h3v13h13v3H0zm64 0H48v-3h13V48h3v16z" fill="#C6A15A"/>
+  <path d="M14 22h36v6H28.5L50 42v6H14v-6h21.5L14 28v-6z" fill="#F4E7CC"/>
+</svg>
