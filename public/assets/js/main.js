@@ -5,7 +5,8 @@
     vision: { key: "vision", name: "Vision", price: 150000, bottles: 8, pv: 150, bonus: 45000, matches: 45, perMatch: 1440, dailyMax: 64800 },
     silver: { key: "silver", name: "Silver", price: 300000, bottles: 16, pv: 300, bonus: 90000, matches: 60, perMatch: 1800, dailyMax: 108000 },
     gold: { key: "gold", name: "Gold", price: 600000, bottles: 32, pv: 600, bonus: 180000, matches: 70, perMatch: 2160, dailyMax: 151200 },
-    diamond: { key: "diamond", name: "Diamond", price: 900000, bottles: 48, pv: 900, bonus: 270000, matches: 100, perMatch: 2520, dailyMax: 252000 }
+    diamond: { key: "diamond", name: "Diamond", price: 900000, bottles: 48, pv: 900, bonus: 270000, matches: 100, perMatch: 2520, dailyMax: 252000 },
+    platinum: { key: "platinum", name: "Platinum", price: 1200000, bottles: 64, pv: 1200, bonus: 360000, matches: 120, perMatch: 2880, dailyMax: 345600 }
   };
 
   function formatNaira(value) {
@@ -513,7 +514,7 @@
     if (!canvas || typeof Chart === "undefined") {
       return;
     }
-    var items = [PACKAGES.vision, PACKAGES.silver, PACKAGES.gold, PACKAGES.diamond];
+    var items = [PACKAGES.vision, PACKAGES.silver, PACKAGES.gold, PACKAGES.diamond, PACKAGES.platinum];
     new Chart(canvas, {
       type: "bar",
       data: {

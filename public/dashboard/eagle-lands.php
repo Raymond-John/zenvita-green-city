@@ -46,7 +46,7 @@
         <div class="dropdown"><button class="profile-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="avatar" data-user-avatar>AO</span><span class="profile-meta"><strong data-user-name>Member</strong><small>Member</small></span></button><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="profile">Profile</a></li><li><a class="dropdown-item" href="../login" data-logout>Logout</a></li></ul></div>
       </header>
       <main class="app-content" id="main">
-        <div class="page-head"><div><h1>Eagle Lands &amp; Properties</h1><p>60% of every Saturday withdrawal cycle is reserved here for Eagle Lands and Properties. This portion is not paid out as cash.</p></div></div>
+        <div class="page-head"><div><h1>Eagle Lands &amp; Properties</h1><p>For Vision–Platinum plans, 60% of every Saturday withdrawal cycle is reserved here. Plans below Vision are not on the 40/60 reduction.</p></div></div>
         <section class="wallet-row mb-3">
           <article class="wallet-card"><span>Eagle Lands Reserve</span><strong id="eagleLandsBalance">…</strong><a href="transactions">View related transactions</a></article>
           <article class="wallet-card"><span>Wallet Balance</span><strong id="eagleWalletBalance">…</strong><a href="withdrawals">Open withdrawals</a></article>
@@ -74,8 +74,9 @@
           <h2>How it works</h2>
           <ul class="mb-0">
             <li>Cash withdrawals are allowed only on <strong>Saturdays</strong>.</li>
-            <li>You may withdraw up to <strong>40%</strong> of your available wallet balance as cash.</li>
-            <li>The matching <strong>60%</strong> is moved into this Eagle Lands &amp; Properties reserve.</li>
+            <li>Vision–Platinum members may withdraw up to <strong>40%</strong> of available balance as cash.</li>
+            <li>For those plans, the matching <strong>60%</strong> is moved into this Eagle Lands &amp; Properties reserve.</li>
+            <li>Plans below Vision are not on the 40/60 split and can withdraw without that Eagle Lands reduction.</li>
           </ul>
         </section>
       </main>

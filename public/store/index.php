@@ -41,6 +41,29 @@
           <article class="stat-card"><span>Ready</span><strong id="statReady">…</strong></article>
           <article class="stat-card"><span>Completed</span><strong id="statCompleted">…</strong></article>
         </section>
+        <section class="panel mb-3" id="storeBonusPanel">
+          <div class="panel-head"><h2>Sales bonus</h2></div>
+          <p class="text-muted small mb-3" id="storeBonusIntro">Complete bookings to grow toward the admin sales target and earn a bonus.</p>
+          <section class="stat-grid mb-3">
+            <article class="stat-card"><span>Completed sales</span><strong id="statSalesTotal">…</strong></article>
+            <article class="stat-card"><span>Target</span><strong id="statSalesTarget">…</strong></article>
+            <article class="stat-card"><span>Bonus each target</span><strong id="statSalesBonus">…</strong></article>
+            <article class="stat-card"><span>Bonuses paid</span><strong id="statBonusPaid">…</strong></article>
+          </section>
+          <div class="mb-2 d-flex justify-content-between gap-2 flex-wrap">
+            <span class="text-muted small" id="storeBonusProgressLabel">Progress to next bonus</span>
+            <strong class="small" id="storeBonusProgressPct">0%</strong>
+          </div>
+          <div class="progress mb-3" style="height: 10px;" aria-hidden="true">
+            <div class="progress-bar bg-success" id="storeBonusProgressBar" style="width: 0%"></div>
+          </div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>Date</th><th>Milestone</th><th>Bonus</th><th>Reference</th></tr></thead>
+              <tbody id="storeBonusBody"><tr><td class="empty-state" colspan="4">No sales bonuses yet.</td></tr></tbody>
+            </table>
+          </div>
+        </section>
         <section class="panel">
           <div class="panel-head"><h2>Recent bookings</h2><a href="orders">View all</a></div>
           <div class="table-wrap">

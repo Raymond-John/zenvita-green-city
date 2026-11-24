@@ -200,6 +200,8 @@ json_out([
             'pairPv' => setting('pair_pv', '60'),
             'binaryQualification' => setting('binary_qualification', '1') === '1',
             'minWithdrawal' => setting('min_withdrawal', '1000'),
+            'storeSalesTarget' => setting('store_sales_target', '3000000'),
+            'storeSalesBonus' => setting('store_sales_bonus', '0'),
             'emailAlerts' => setting('email_alerts', '1') === '1',
             'smsAlerts' => setting('sms_alerts', '0') === '1',
             'paystackPublicKey' => setting('paystack_public_key', ''),

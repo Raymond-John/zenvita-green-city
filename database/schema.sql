@@ -94,7 +94,8 @@ INSERT INTO packages (code, name, price, bottles, pv, direct_bonus, daily_pairs,
 ('vision', 'Vision', 150000, 8, 150, 45000, 45, 1440, 64800),
 ('silver', 'Silver', 300000, 16, 300, 90000, 60, 1800, 108000),
 ('gold', 'Gold', 600000, 32, 600, 180000, 70, 2160, 151200),
-('diamond', 'Diamond', 900000, 48, 900, 270000, 100, 2520, 252000);
+('diamond', 'Diamond', 900000, 48, 900, 270000, 100, 2520, 252000),
+('platinum', 'Platinum', 1200000, 64, 1200, 360000, 120, 2880, 345600);
 
 INSERT INTO users (id, member_code, username, email, phone, password_hash, first_name, last_name, role, package_id, sponsor_id, parent_id, binary_side, status, personal_pv, left_pv, right_pv, city, country, bank_name, account_name, account_number) VALUES
 (1, NULL, 'admin', 'admin@example.com', NULL, '$2y$10$X6T4yk.3e8Tokhuu3XGVJOV1V6AYrMXImGP5IImtOhSikEYKFkBpS', 'Admin', '', 'admin', NULL, NULL, NULL, NULL, 'active', 0, 0, 0, '', '', '', '', '');

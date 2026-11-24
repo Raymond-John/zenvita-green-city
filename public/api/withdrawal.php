@@ -13,7 +13,7 @@ $bank = trim((string) ($body['bank'] ?? ''));
 $accountName = trim((string) ($body['accountName'] ?? ''));
 $accountNumber = preg_replace('/\D+/', '', (string) ($body['accountNumber'] ?? ''));
 
-$policy = withdrawal_policy();
+$policy = withdrawal_policy($user);
 if (!$policy['isWithdrawDay']) {
     json_out([
         'ok' => false,
@@ -32,7 +32,7 @@ if (strlen($accountNumber) !== 10) {
     json_out(['ok' => false, 'error' => 'Enter a 10-digit account number.'], 422);
 }
 
-$split = withdrawal_split($amount);
+$split = withdrawal_split($amount, $user);
 $pdo = db();
 $pdo->beginTransaction();
 try {
@@ -45,14 +45,20 @@ try {
     $maxCash = round($available * ((float) $policy['cashPercent'] / 100), 2);
     if ($amount > $maxCash + 0.00001) {
         $pdo->rollBack();
+        if (!empty($policy['eagleLandsSplit'])) {
+            json_out([
+                'ok' => false,
+                'error' => 'You can withdraw only ' . (int) $policy['cashPercent'] . '% of your balance (max ₦' . number_format($maxCash, 0) . '). The remaining ' . (int) $policy['reservePercent'] . '% goes to Eagle Lands & Properties (Vision–Platinum plans).',
+            ], 422);
+        }
         json_out([
             'ok' => false,
-            'error' => 'You can withdraw only ' . (int) $policy['cashPercent'] . '% of your balance (max ₦' . number_format($maxCash, 0) . '). The remaining ' . (int) $policy['reservePercent'] . '% goes to Eagle Lands & Properties.',
+            'error' => 'Insufficient wallet balance (max ₦' . number_format($maxCash, 0) . ').',
         ], 422);
     }
     if ($split['total'] > $available + 0.00001) {
         $pdo->rollBack();
-        json_out(['ok' => false, 'error' => 'Not enough balance for the cash withdrawal plus Eagle Lands reserve.'], 422);
+        json_out(['ok' => false, 'error' => 'Not enough balance for this withdrawal' . (!empty($split['eagleLandsSplit']) ? ' plus Eagle Lands reserve.' : '.')], 422);
     }
 
     $pdo->prepare(
@@ -68,22 +74,27 @@ try {
     )->execute([$user['id'], $split['cash'], $split['reserved'], $bank, $accountNumber, $accountName]);
 
     $cashRef = 'TX-' . date('ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(2)), 0, 4));
-    $eagleRef = 'TX-' . date('ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(2)), 0, 4));
-
+    $cashLabel = !empty($split['eagleLandsSplit'])
+        ? 'Cash withdrawal request (40%)'
+        : 'Cash withdrawal request';
     $pdo->prepare(
         'INSERT INTO transactions (user_id, reference, tx_type, description, amount, status, tx_date)
          VALUES (?, ?, \'Withdrawal\', ?, ?, \'Pending\', CURDATE())'
-    )->execute([$user['id'], $cashRef, 'Cash withdrawal request (40%)', -$split['cash']]);
+    )->execute([$user['id'], $cashRef, $cashLabel, -$split['cash']]);
 
-    $pdo->prepare(
-        'INSERT INTO transactions (user_id, reference, tx_type, description, amount, status, tx_date)
-         VALUES (?, ?, \'Eagle Lands\', ?, ?, \'Approved\', CURDATE())'
-    )->execute([
-        $user['id'],
-        $eagleRef,
-        'Reserved for Eagle Lands & Properties (60%)',
-        -$split['reserved'],
-    ]);
+    $eagleRef = null;
+    if ($split['reserved'] > 0) {
+        $eagleRef = 'TX-' . date('ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(2)), 0, 4));
+        $pdo->prepare(
+            'INSERT INTO transactions (user_id, reference, tx_type, description, amount, status, tx_date)
+             VALUES (?, ?, \'Eagle Lands\', ?, ?, \'Approved\', CURDATE())'
+        )->execute([
+            $user['id'],
+            $eagleRef,
+            'Reserved for Eagle Lands & Properties (60%)',
+            -$split['reserved'],
+        ]);
+    }
 
     $pdo->commit();
 } catch (Throwable $error) {
@@ -93,11 +104,13 @@ try {
     json_out(['ok' => false, 'error' => 'The withdrawal could not be saved.'], 500);
 }
 
-json_out([
+$remaining = round($available - $split['total'], 2);
+$response = [
     'ok' => true,
-    'available' => round($available - $split['total'], 2),
+    'available' => $remaining,
     'eagleLands' => round($eagle + $split['reserved'], 2),
-    'withdrawable' => round(($available - $split['total']) * ((float) $policy['cashPercent'] / 100), 2),
+    'withdrawable' => round($remaining * ((float) $policy['cashPercent'] / 100), 2),
+    'withdrawalPolicy' => $policy,
     'withdrawal' => [
         'date' => date('d M Y'),
         'amount' => $split['cash'],
@@ -111,16 +124,21 @@ json_out([
         'date' => date('d M Y'),
         'id' => $cashRef,
         'type' => 'Withdrawal',
-        'description' => 'Cash withdrawal request (40%)',
+        'description' => $cashLabel,
         'amount' => -$split['cash'],
         'status' => 'Pending',
     ],
-    'eagleTransaction' => [
+];
+
+if ($eagleRef) {
+    $response['eagleTransaction'] = [
         'date' => date('d M Y'),
         'id' => $eagleRef,
         'type' => 'Eagle Lands',
         'description' => 'Reserved for Eagle Lands & Properties (60%)',
         'amount' => -$split['reserved'],
         'status' => 'Approved',
-    ],
-]);
+    ];
+}
+
+json_out($response);

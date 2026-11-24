@@ -86,6 +86,20 @@
                 <input class="form-control" id="minWithdrawal" name="minWithdrawal" type="number" min="0">
                 <p class="mt-2 mb-0 text-muted small">Minimum amount a member is required to request when withdrawing from their wallet balance.</p>
               </div>
+              <hr>
+              <h3 class="h6">Store sales bonus</h3>
+              <p class="text-muted small">When a store’s <strong>completed</strong> sales reach the target (default ₦3,000,000), the store owner is credited the bonus you set. The bonus repeats for every additional target reached (₦3M, ₦6M, …).</p>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label" for="storeSalesTarget">Sales target (₦)</label>
+                  <input class="form-control" id="storeSalesTarget" name="storeSalesTarget" type="number" min="1" step="1" value="3000000">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label" for="storeSalesBonus">Bonus amount (₦)</label>
+                  <input class="form-control" id="storeSalesBonus" name="storeSalesBonus" type="number" min="0" step="1" value="0">
+                </div>
+              </div>
+              <p class="mt-2 mb-0 text-muted small">Set bonus to 0 to disable payouts until you configure it.</p>
             </section>
             <section class="panel" data-settings-panel="smtp" hidden>
               <h2>Email / SMTP · Hostinger</h2>

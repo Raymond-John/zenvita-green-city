@@ -134,6 +134,59 @@
     }
   }
 
+  function paintSalesBonus() {
+    var bonus = office.salesBonus || {};
+    var salesEl = document.getElementById("statSalesTotal");
+    if (!salesEl) {
+      return;
+    }
+    salesEl.textContent = Z.formatNaira(bonus.salesTotal || 0);
+    var targetEl = document.getElementById("statSalesTarget");
+    var bonusEl = document.getElementById("statSalesBonus");
+    var paidEl = document.getElementById("statBonusPaid");
+    if (targetEl) targetEl.textContent = Z.formatNaira(bonus.target || 3000000);
+    if (bonusEl) bonusEl.textContent = Z.formatNaira(bonus.bonus || 0);
+    if (paidEl) paidEl.textContent = Z.formatNaira(bonus.bonusPaid || 0);
+
+    var intro = document.getElementById("storeBonusIntro");
+    if (intro) {
+      if (!bonus.enabled) {
+        intro.textContent = "Admin has not set a store sales bonus amount yet. Your completed sales still count toward the target.";
+      } else {
+        intro.textContent = "Each time completed sales reach " + Z.formatNaira(bonus.target || 3000000) +
+          ", you earn " + Z.formatNaira(bonus.bonus || 0) + " credited to your store wallet.";
+      }
+    }
+
+    var pct = Number(bonus.progressPercent) || 0;
+    var bar = document.getElementById("storeBonusProgressBar");
+    var pctLabel = document.getElementById("storeBonusProgressPct");
+    var progressLabel = document.getElementById("storeBonusProgressLabel");
+    if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+    if (pctLabel) pctLabel.textContent = pct + "%";
+    if (progressLabel) {
+      progressLabel.textContent = bonus.enabled
+        ? ("Progress to next bonus · " + Z.formatNaira(bonus.remainingToNext || 0) + " remaining")
+        : ("Sales progress · " + Z.formatNaira(bonus.progressAmount || 0) + " toward " + Z.formatNaira(bonus.target || 3000000));
+    }
+
+    var body = document.getElementById("storeBonusBody");
+    if (!body) {
+      return;
+    }
+    var awards = bonus.awards || [];
+    if (!awards.length) {
+      body.innerHTML = '<tr><td class="empty-state" colspan="4">No sales bonuses earned yet.</td></tr>';
+      return;
+    }
+    body.innerHTML = awards.map(function (row) {
+      return "<tr><td>" + Z.escapeHtml(row.date) +
+        "</td><td>" + Z.formatNaira(row.milestone) +
+        "</td><td>" + Z.formatNaira(row.bonus) +
+        "</td><td>" + Z.escapeHtml(row.reference) + "</td></tr>";
+    }).join("");
+  }
+
   function initDashboard() {
     var body = document.getElementById("storeRecentBody");
     if (!body) {
@@ -143,6 +196,7 @@
     document.getElementById("statAccepted").textContent = String(office.stats.accepted || 0);
     document.getElementById("statReady").textContent = String(office.stats.ready || 0);
     document.getElementById("statCompleted").textContent = String(office.stats.completed || 0);
+    paintSalesBonus();
     var rows = (office.orders || []).slice(0, 8);
     if (!rows.length) {
       body.innerHTML = '<tr><td class="empty-state" colspan="6">No bookings yet.</td></tr>';
@@ -214,7 +268,16 @@
         return reloadOffice().then(function () {
           paint();
           initShell();
-          Z.showToast("Order marked " + next + ".");
+          initDashboard();
+          var awarded = (payload.salesBonus && payload.salesBonus.awarded) || [];
+          if (awarded.length) {
+            var totalBonus = awarded.reduce(function (sum, row) {
+              return sum + (Number(row.bonus) || 0);
+            }, 0);
+            Z.showToast("Order completed. Sales bonus credited: " + Z.formatNaira(totalBonus) + ".");
+          } else {
+            Z.showToast("Order marked " + next + ".");
+          }
         });
       }).catch(function () {
         statusBtn.disabled = false;

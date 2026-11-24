@@ -3,6 +3,7 @@ require __DIR__ . '/bootstrap.php';
 
 $user = require_user('store');
 $pdo = db();
+ensure_store_sales_bonus_schema($pdo);
 
 $storeStmt = $pdo->prepare('SELECT * FROM stores WHERE owner_user_id = ? LIMIT 1');
 $storeStmt->execute([(int) $user['id']]);
@@ -12,6 +13,9 @@ if (!$store) {
 }
 
 $storeId = (int) $store['id'];
+// Catch up any missed awards if sales already crossed a threshold.
+maybe_award_store_sales_bonuses($storeId, $pdo);
+$salesBonus = store_sales_bonus_summary($storeId, (int) $user['id'], $pdo);
 
 $ordersStmt = $pdo->prepare(
     'SELECT o.id, o.reference, o.quantity, o.unit_price, o.fulfillment, o.full_name, o.phone, o.email,
@@ -115,6 +119,7 @@ json_out([
         'total' => count($orders),
         'unread' => $unread,
     ],
+    'salesBonus' => $salesBonus,
     'orders' => $orders,
     'notifications' => $notifications,
 ]);

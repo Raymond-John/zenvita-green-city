@@ -505,7 +505,293 @@ function ensure_eagle_lands_schema(?PDO $pdo = null): void
     $done = true;
 }
 
-function withdrawal_policy(): array
+function ensure_store_sales_bonus_schema(?PDO $pdo = null): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $pdo = $pdo ?: db();
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS store_sales_bonus_awards (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            store_id INT UNSIGNED NOT NULL,
+            owner_user_id INT UNSIGNED NOT NULL,
+            threshold_level INT UNSIGNED NOT NULL,
+            target_amount DECIMAL(14,2) NOT NULL,
+            bonus_amount DECIMAL(14,2) NOT NULL,
+            sales_total DECIMAL(14,2) NOT NULL,
+            reference VARCHAR(40) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_store_bonus_level (store_id, threshold_level),
+            UNIQUE KEY uq_store_bonus_reference (reference),
+            KEY idx_store_bonus_owner (owner_user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    );
+    $stmt = $pdo->prepare(
+        'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE setting_key = setting_key'
+    );
+    foreach ([
+        'store_sales_target' => '3000000',
+        'store_sales_bonus' => '0',
+    ] as $key => $value) {
+        $stmt->execute([$key, $value]);
+    }
+    $done = true;
+}
+
+function store_sales_bonus_config(): array
+{
+    ensure_store_sales_bonus_schema();
+    $target = max(0, (float) setting('store_sales_target', '3000000'));
+    $bonus = max(0, (float) setting('store_sales_bonus', '0'));
+    if ($target <= 0) {
+        $target = 3000000;
+    }
+    return [
+        'target' => $target,
+        'bonus' => $bonus,
+        'enabled' => $bonus > 0,
+    ];
+}
+
+function store_completed_sales_total(int $storeId, ?PDO $pdo = null): float
+{
+    $pdo = $pdo ?: db();
+    $stmt = $pdo->prepare(
+        "SELECT COALESCE(SUM(quantity * unit_price), 0)
+         FROM orders
+         WHERE store_id = ? AND status = 'Completed'"
+    );
+    $stmt->execute([$storeId]);
+    return round((float) $stmt->fetchColumn(), 2);
+}
+
+/**
+ * Award repeating store sales bonuses each time completed sales cross the admin target
+ * (default ₦3,000,000). Bonus amount is set by admin.
+ */
+function maybe_award_store_sales_bonuses(int $storeId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?: db();
+    ensure_store_sales_bonus_schema($pdo);
+    $config = store_sales_bonus_config();
+    $awarded = [];
+    $ownsTx = false;
+
+    if ($config['bonus'] <= 0 || $config['target'] <= 0) {
+        return [
+            'awarded' => [],
+            'salesTotal' => store_completed_sales_total($storeId, $pdo),
+            'config' => $config,
+        ];
+    }
+
+    try {
+        if (!$pdo->inTransaction()) {
+            $pdo->beginTransaction();
+            $ownsTx = true;
+        }
+
+        $storeStmt = $pdo->prepare('SELECT id, owner_user_id, name FROM stores WHERE id = ? LIMIT 1 FOR UPDATE');
+        $storeStmt->execute([$storeId]);
+        $store = $storeStmt->fetch();
+        if (!$store) {
+            if ($ownsTx) {
+                $pdo->rollBack();
+            }
+            return ['awarded' => [], 'salesTotal' => 0.0, 'config' => $config];
+        }
+
+        $ownerId = (int) $store['owner_user_id'];
+        $salesTotal = store_completed_sales_total($storeId, $pdo);
+        $levelsDue = (int) floor($salesTotal / $config['target']);
+        if ($levelsDue < 1) {
+            if ($ownsTx) {
+                $pdo->commit();
+            }
+            return ['awarded' => [], 'salesTotal' => $salesTotal, 'config' => $config];
+        }
+
+        $existingStmt = $pdo->prepare(
+            'SELECT threshold_level FROM store_sales_bonus_awards WHERE store_id = ? FOR UPDATE'
+        );
+        $existingStmt->execute([$storeId]);
+        $have = [];
+        foreach ($existingStmt->fetchAll(PDO::FETCH_COLUMN) as $level) {
+            $have[(int) $level] = true;
+        }
+
+        for ($level = 1; $level <= $levelsDue; $level++) {
+            if (isset($have[$level])) {
+                continue;
+            }
+
+            $wallet = $pdo->prepare('SELECT available_balance FROM wallets WHERE user_id = ? FOR UPDATE');
+            $wallet->execute([$ownerId]);
+            if ($wallet->fetch() === false) {
+                $pdo->prepare('INSERT INTO wallets (user_id, available_balance, eagle_lands_balance) VALUES (?, 0, 0)')
+                    ->execute([$ownerId]);
+            }
+
+            $reference = 'SB-' . $storeId . '-L' . $level . '-' . strtoupper(substr(bin2hex(random_bytes(2)), 0, 4));
+            try {
+                $pdo->prepare(
+                    'INSERT INTO store_sales_bonus_awards
+                        (store_id, owner_user_id, threshold_level, target_amount, bonus_amount, sales_total, reference)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)'
+                )->execute([
+                    $storeId,
+                    $ownerId,
+                    $level,
+                    $config['target'],
+                    $config['bonus'],
+                    $salesTotal,
+                    $reference,
+                ]);
+            } catch (PDOException $e) {
+                continue;
+            }
+
+            $pdo->prepare('UPDATE wallets SET available_balance = available_balance + ? WHERE user_id = ?')
+                ->execute([$config['bonus'], $ownerId]);
+
+            $milestone = $config['target'] * $level;
+            $pdo->prepare(
+                'INSERT INTO transactions (user_id, reference, tx_type, description, amount, status, tx_date)
+                 VALUES (?, ?, \'Store Bonus\', ?, ?, \'Approved\', CURDATE())'
+            )->execute([
+                $ownerId,
+                $reference,
+                'Store sales bonus for reaching ₦' . number_format($milestone, 0) . ' completed sales',
+                $config['bonus'],
+            ]);
+
+            $awarded[] = [
+                'level' => $level,
+                'target' => $config['target'],
+                'milestone' => $milestone,
+                'bonus' => $config['bonus'],
+                'reference' => $reference,
+            ];
+        }
+
+        if ($ownsTx) {
+            $pdo->commit();
+        }
+    } catch (Throwable $e) {
+        if ($ownsTx && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+
+    return [
+        'awarded' => $awarded,
+        'salesTotal' => store_completed_sales_total($storeId, $pdo),
+        'config' => $config,
+    ];
+}
+
+function store_sales_bonus_summary(int $storeId, int $ownerUserId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?: db();
+    ensure_store_sales_bonus_schema($pdo);
+    $config = store_sales_bonus_config();
+    $salesTotal = store_completed_sales_total($storeId, $pdo);
+    $target = (float) $config['target'];
+    $levelsEarned = $target > 0 ? (int) floor($salesTotal / $target) : 0;
+    $intoCurrent = $target > 0 ? fmod($salesTotal, $target) : 0.0;
+    if ($intoCurrent < 0) {
+        $intoCurrent = 0.0;
+    }
+    $remaining = $target > 0 ? max(0, $target - $intoCurrent) : 0.0;
+    if ($levelsEarned > 0 && abs($intoCurrent) < 0.00001) {
+        $intoCurrent = $target;
+        $remaining = 0.0;
+    }
+
+    $wallet = $pdo->prepare('SELECT available_balance FROM wallets WHERE user_id = ?');
+    $wallet->execute([$ownerUserId]);
+    $balance = (float) ($wallet->fetchColumn() ?: 0);
+
+    $awardsStmt = $pdo->prepare(
+        'SELECT threshold_level, target_amount, bonus_amount, sales_total, reference, created_at
+         FROM store_sales_bonus_awards
+         WHERE store_id = ?
+         ORDER BY threshold_level DESC'
+    );
+    $awardsStmt->execute([$storeId]);
+    $awards = [];
+    $bonusPaid = 0.0;
+    foreach ($awardsStmt as $row) {
+        $bonusPaid += (float) $row['bonus_amount'];
+        $awards[] = [
+            'level' => (int) $row['threshold_level'],
+            'target' => (float) $row['target_amount'],
+            'bonus' => (float) $row['bonus_amount'],
+            'salesTotal' => (float) $row['sales_total'],
+            'milestone' => (float) $row['target_amount'] * (int) $row['threshold_level'],
+            'reference' => $row['reference'],
+            'date' => date('d M Y H:i', strtotime($row['created_at'])),
+        ];
+    }
+
+    return [
+        'target' => $target,
+        'bonus' => (float) $config['bonus'],
+        'enabled' => !empty($config['enabled']),
+        'salesTotal' => $salesTotal,
+        'levelsEarned' => $levelsEarned,
+        'progressAmount' => round($intoCurrent, 2),
+        'remainingToNext' => round($remaining, 2),
+        'progressPercent' => $target > 0 ? min(100, round(($intoCurrent / $target) * 100, 1)) : 0,
+        'walletBalance' => $balance,
+        'bonusPaid' => round($bonusPaid, 2),
+        'awards' => $awards,
+    ];
+}
+
+/**
+ * Eagle Lands 40/60 split applies only from Vision through Platinum.
+ * Plans below Vision (or no package) withdraw without that reduction.
+ */
+function eagle_lands_package_codes(): array
+{
+    return ['vision', 'silver', 'gold', 'diamond', 'platinum'];
+}
+
+function package_uses_eagle_lands_split(?array $user = null): bool
+{
+    $user = $user ?? current_user();
+    if (!$user) {
+        return false;
+    }
+    $code = strtolower(trim((string) ($user['package_code'] ?? '')));
+    if ($code === '') {
+        return false;
+    }
+    if (in_array($code, eagle_lands_package_codes(), true)) {
+        return true;
+    }
+    // Fallback: any package at or above Vision price also qualifies.
+    try {
+        $pdo = db();
+        $vision = $pdo->query("SELECT price FROM packages WHERE code = 'vision' LIMIT 1")->fetchColumn();
+        if ($vision === false) {
+            return false;
+        }
+        $stmt = $pdo->prepare('SELECT price FROM packages WHERE code = ? LIMIT 1');
+        $stmt->execute([$code]);
+        $price = $stmt->fetchColumn();
+        return $price !== false && (float) $price >= (float) $vision;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function withdrawal_policy(?array $user = null): array
 {
     ensure_eagle_lands_schema();
     $cashPercent = max(0, min(100, (float) setting('withdraw_cash_percent', '40')));
@@ -518,6 +804,11 @@ function withdrawal_policy(): array
     }
     $now = new DateTimeImmutable('now', app_timezone());
     $isSaturday = ((int) $now->format('N')) === 6;
+    $eligible = package_uses_eagle_lands_split($user);
+    if (!$eligible) {
+        $cashPercent = 100;
+        $reservePercent = 0;
+    }
     return [
         'day' => 'Saturday',
         'cashPercent' => $cashPercent,
@@ -525,21 +816,36 @@ function withdrawal_policy(): array
         'isWithdrawDay' => $isSaturday,
         'today' => $now->format('l'),
         'timezone' => 'Africa/Lagos',
+        'eagleLandsEligible' => $eligible,
+        'eagleLandsSplit' => $eligible && $reservePercent > 0,
+        'eagleLandsPackages' => eagle_lands_package_codes(),
     ];
 }
 
-function withdrawal_split(float $cashAmount): array
+function withdrawal_split(float $cashAmount, ?array $user = null): array
 {
-    $policy = withdrawal_policy();
+    $policy = withdrawal_policy($user);
     $cashPercent = (float) $policy['cashPercent'];
     $reservePercent = (float) $policy['reservePercent'];
-    $reserved = round($cashAmount * ($reservePercent / $cashPercent), 2);
+    $cash = round($cashAmount, 2);
+    if ($reservePercent <= 0 || $cashPercent <= 0 || empty($policy['eagleLandsSplit'])) {
+        return [
+            'cash' => $cash,
+            'reserved' => 0.0,
+            'total' => $cash,
+            'cashPercent' => $cashPercent,
+            'reservePercent' => 0.0,
+            'eagleLandsSplit' => false,
+        ];
+    }
+    $reserved = round($cash * ($reservePercent / $cashPercent), 2);
     return [
-        'cash' => round($cashAmount, 2),
+        'cash' => $cash,
         'reserved' => $reserved,
-        'total' => round($cashAmount + $reserved, 2),
+        'total' => round($cash + $reserved, 2),
         'cashPercent' => $cashPercent,
         'reservePercent' => $reservePercent,
+        'eagleLandsSplit' => true,
     ];
 }
 

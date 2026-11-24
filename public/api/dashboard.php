@@ -25,7 +25,7 @@ $wallet->execute([$user['id']]);
 $walletRow = $wallet->fetch() ?: ['available_balance' => 0, 'eagle_lands_balance' => 0];
 $available = (float) ($walletRow['available_balance'] ?? 0);
 $eagleLands = (float) ($walletRow['eagle_lands_balance'] ?? 0);
-$policy = withdrawal_policy();
+$policy = withdrawal_policy($user);
 $withdrawable = round($available * ((float) $policy['cashPercent'] / 100), 2);
 
 $recent = $pdo->prepare(

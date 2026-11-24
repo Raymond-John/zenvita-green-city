@@ -667,6 +667,8 @@
       pairPv: "60",
       binaryQualification: true,
       minWithdrawal: "1000",
+      storeSalesTarget: "3000000",
+      storeSalesBonus: "0",
       emailAlerts: true,
       smsAlerts: false,
       smtpProvider: "hostinger",
@@ -687,6 +689,12 @@
       form.binaryQualification.checked = !!data.binaryQualification;
     }
     form.minWithdrawal.value = data.minWithdrawal;
+    if (form.storeSalesTarget) {
+      form.storeSalesTarget.value = data.storeSalesTarget || "3000000";
+    }
+    if (form.storeSalesBonus) {
+      form.storeSalesBonus.value = data.storeSalesBonus || "0";
+    }
     form.emailAlerts.checked = !!data.emailAlerts;
     form.smsAlerts.checked = !!data.smsAlerts;
     if (form.smtpHost) {
@@ -723,6 +731,8 @@
         pairPv: form.pairPv.value,
         binaryQualification: form.binaryQualification ? form.binaryQualification.checked : true,
         minWithdrawal: form.minWithdrawal.value,
+        storeSalesTarget: form.storeSalesTarget ? form.storeSalesTarget.value : "3000000",
+        storeSalesBonus: form.storeSalesBonus ? form.storeSalesBonus.value : "0",
         emailAlerts: form.emailAlerts.checked,
         smsAlerts: form.smsAlerts.checked
       };

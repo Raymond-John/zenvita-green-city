@@ -9,7 +9,7 @@ $user = require_user('store');
 $body = request_body();
 $pdo = db();
 
-$storeStmt = $pdo->prepare('SELECT id FROM stores WHERE owner_user_id = ? LIMIT 1');
+$storeStmt = $pdo->prepare('SELECT id, owner_user_id FROM stores WHERE owner_user_id = ? LIMIT 1');
 $storeStmt->execute([(int) $user['id']]);
 $store = $storeStmt->fetch();
 if (!$store) {
@@ -32,14 +32,38 @@ if ($orderId < 1 || !in_array($status, $allowed, true)) {
     json_out(['ok' => false, 'error' => 'Choose a valid order status.'], 422);
 }
 
-$order = $pdo->prepare('SELECT id, status FROM orders WHERE id = ? AND store_id = ? LIMIT 1');
-$order->execute([$orderId, $storeId]);
-$row = $order->fetch();
-if (!$row) {
-    json_out(['ok' => false, 'error' => 'That order was not found for this store.'], 404);
+$pdo->beginTransaction();
+try {
+    $order = $pdo->prepare('SELECT id, status FROM orders WHERE id = ? AND store_id = ? LIMIT 1 FOR UPDATE');
+    $order->execute([$orderId, $storeId]);
+    $row = $order->fetch();
+    if (!$row) {
+        $pdo->rollBack();
+        json_out(['ok' => false, 'error' => 'That order was not found for this store.'], 404);
+    }
+
+    $previous = (string) $row['status'];
+    $pdo->prepare('UPDATE orders SET status = ? WHERE id = ? AND store_id = ?')
+        ->execute([$status, $orderId, $storeId]);
+
+    $bonusResult = ['awarded' => []];
+    if ($status === 'Completed' && $previous !== 'Completed') {
+        $bonusResult = maybe_award_store_sales_bonuses($storeId, $pdo);
+    }
+
+    $pdo->commit();
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    json_out(['ok' => false, 'error' => 'Could not update the order.'], 500);
 }
 
-$pdo->prepare('UPDATE orders SET status = ? WHERE id = ? AND store_id = ?')
-    ->execute([$status, $orderId, $storeId]);
-
-json_out(['ok' => true, 'status' => $status]);
+json_out([
+    'ok' => true,
+    'status' => $status,
+    'salesBonus' => [
+        'awarded' => $bonusResult['awarded'] ?? [],
+        'salesTotal' => $bonusResult['salesTotal'] ?? null,
+    ],
+]);

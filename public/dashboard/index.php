@@ -81,7 +81,7 @@
         <section class="wallet-row">
           <article class="wallet-card"><span>Withdrawable (40%)</span><strong id="statWithdrawable">…</strong><a href="withdrawals">Saturdays only</a></article>
           <article class="wallet-card"><span>Eagle Lands &amp; Properties</span><strong id="statEagleLands">…</strong><a href="eagle-lands">Open Eagle Lands</a></article>
-          <article class="wallet-card"><span>Reserve Rule</span><strong style="font-size:1.05rem;">60% reserved</strong><a href="eagle-lands">On each withdrawal</a></article>
+          <article class="wallet-card"><span>Reserve Rule</span><strong id="statReserveRule" style="font-size:1.05rem;">…</strong><a href="eagle-lands">Withdrawal policy</a></article>
         </section>
         <p class="visually-hidden" id="statPv"></p>
         <p class="visually-hidden" id="statDirect"></p>
