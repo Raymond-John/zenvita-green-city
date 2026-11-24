@@ -472,8 +472,42 @@ function app_timezone(): DateTimeZone
     return new DateTimeZone('Africa/Lagos');
 }
 
+function ensure_eagle_lands_schema(?PDO $pdo = null): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $pdo = $pdo ?: db();
+
+    $walletCols = $pdo->query('SHOW COLUMNS FROM wallets')->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('eagle_lands_balance', $walletCols, true)) {
+        $pdo->exec('ALTER TABLE wallets ADD COLUMN eagle_lands_balance DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER available_balance');
+    }
+
+    $wdCols = $pdo->query('SHOW COLUMNS FROM withdrawals')->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('reserved_amount', $wdCols, true)) {
+        $pdo->exec('ALTER TABLE withdrawals ADD COLUMN reserved_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER amount');
+    }
+
+    $stmt = $pdo->prepare(
+        'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE setting_key = setting_key'
+    );
+    foreach ([
+        'withdraw_day' => 'saturday',
+        'withdraw_cash_percent' => '40',
+        'withdraw_reserve_percent' => '60',
+    ] as $key => $value) {
+        $stmt->execute([$key, $value]);
+    }
+
+    $done = true;
+}
+
 function withdrawal_policy(): array
 {
+    ensure_eagle_lands_schema();
     $cashPercent = max(0, min(100, (float) setting('withdraw_cash_percent', '40')));
     $reservePercent = max(0, min(100, (float) setting('withdraw_reserve_percent', '60')));
     if ($cashPercent <= 0) {

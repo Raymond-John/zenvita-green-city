@@ -3,6 +3,7 @@ require __DIR__ . '/bootstrap.php';
 
 $user = require_user('member');
 $pdo = db();
+ensure_eagle_lands_schema($pdo);
 
 function flatten_team(array $node, array &$list): void
 {

@@ -3,6 +3,7 @@ require __DIR__ . '/bootstrap.php';
 
 require_user('admin');
 $pdo = db();
+ensure_eagle_lands_schema($pdo);
 
 $rows = $pdo->query(
     'SELECT u.id, u.member_code, u.email, u.phone, u.first_name, u.last_name, u.status,

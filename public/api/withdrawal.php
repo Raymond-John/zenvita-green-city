@@ -6,6 +6,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $user = require_user('member');
+ensure_eagle_lands_schema();
 $body = request_body();
 $amount = (float) ($body['amount'] ?? 0);
 $bank = trim((string) ($body['bank'] ?? ''));

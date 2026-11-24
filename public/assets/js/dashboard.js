@@ -764,18 +764,45 @@
     var eagle = document.getElementById("eagleLandsBalance");
     var walletEl = document.getElementById("eagleWalletBalance");
     var withdrawableEl = document.getElementById("eagleWithdrawable");
-    if (!eagle && !walletEl && !withdrawableEl) {
+    var reserveBody = document.getElementById("eagleReserveBody");
+    if (!eagle && !walletEl && !withdrawableEl && !reserveBody) {
       return;
     }
     var data = wallet();
+    var eagleTotal = Number(data.eagleLands);
+    if (!isFinite(eagleTotal)) {
+      eagleTotal = 0;
+    }
     if (eagle) {
-      eagle.textContent = Z.formatNaira(data.eagleLands || 0);
+      eagle.textContent = Z.formatNaira(eagleTotal);
     }
     if (walletEl) {
       walletEl.textContent = Z.formatNaira(data.available || 0);
     }
     if (withdrawableEl) {
       withdrawableEl.textContent = Z.formatNaira(data.withdrawable || 0);
+    }
+    if (reserveBody) {
+      var rows = (data.withdrawals || []).filter(function (row) {
+        return Number(row.reserved) > 0 && row.status !== "Rejected";
+      });
+      var empty = document.getElementById("eagleReserveEmpty");
+      var wrap = document.getElementById("eagleReserveWrap");
+      if (!rows.length) {
+        reserveBody.innerHTML = "";
+        if (empty) empty.hidden = false;
+        if (wrap) wrap.hidden = true;
+      } else {
+        if (empty) empty.hidden = true;
+        if (wrap) wrap.hidden = false;
+        reserveBody.innerHTML = rows.map(function (row) {
+          return "<tr><td>" + Z.escapeHtml(row.date) +
+            "</td><td>" + Z.formatNaira(row.amount) +
+            "</td><td>" + Z.formatNaira(row.reserved) +
+            '</td><td><span class="' + Z.statusClass(row.status) + '">' + Z.escapeHtml(row.status) +
+            "</span></td></tr>";
+        }).join("");
+      }
     }
   }
 

@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS wallets (
   user_id INT UNSIGNED PRIMARY KEY,
   available_balance DECIMAL(12,2) NOT NULL DEFAULT 0,
+  eagle_lands_balance DECIMAL(12,2) NOT NULL DEFAULT 0,
   CONSTRAINT fk_wallets_user FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
@@ -80,6 +81,7 @@ CREATE TABLE IF NOT EXISTS withdrawals (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id INT UNSIGNED NOT NULL,
   amount DECIMAL(12,2) NOT NULL,
+  reserved_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
   bank_name VARCHAR(80) NOT NULL,
   account_number VARCHAR(30) NOT NULL,
   account_name VARCHAR(120) NOT NULL,

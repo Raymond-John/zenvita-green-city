@@ -52,6 +52,24 @@
           <article class="wallet-card"><span>Wallet Balance</span><strong id="eagleWalletBalance">…</strong><a href="withdrawals">Open withdrawals</a></article>
           <article class="wallet-card"><span>Withdrawable (40%)</span><strong id="eagleWithdrawable">…</strong><a href="withdrawals">Request on Saturday</a></article>
         </section>
+        <section class="panel mb-3">
+          <div class="panel-head"><h2>Reserve history</h2></div>
+          <p class="text-muted small">Each Saturday cash withdrawal moves a matching 60% into Eagle Lands. Those reserved amounts are listed here.</p>
+          <div class="table-wrap" id="eagleReserveWrap">
+            <table class="data">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Cash (40%)</th>
+                  <th>Eagle Lands (60%)</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="eagleReserveBody"><tr><td class="loading-row" colspan="4">Loading reserve history…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="eagleReserveEmpty" hidden>No Eagle Lands reserves yet. They appear when you request a Saturday withdrawal.</div>
+        </section>
         <section class="panel">
           <h2>How it works</h2>
           <ul class="mb-0">
