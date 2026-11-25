@@ -610,12 +610,12 @@
     function policy() {
       return (wallet().withdrawalPolicy) || {
         isWithdrawDay: false,
-        cashPercent: 40,
-        reservePercent: 60,
+        cashPercent: 100,
+        reservePercent: 0,
         today: "",
         day: "Saturday",
-        eagleLandsEligible: true,
-        eagleLandsSplit: true
+        eagleLandsEligible: false,
+        eagleLandsSplit: false
       };
     }
 
@@ -638,9 +638,10 @@
         return 0;
       }
       var p = policy();
-      var cashPercent = Number(p.cashPercent) || 40;
-      var reservePercent = Number(p.reservePercent) || 60;
-      if (cashPercent <= 0 || reservePercent <= 0) {
+      var cashPercent = Number(p.cashPercent);
+      var reservePercent = Number(p.reservePercent);
+      // Treat missing/NaN as unsafe; never coerce 0 → 40/60 via ||.
+      if (!isFinite(cashPercent) || !isFinite(reservePercent) || cashPercent <= 0 || reservePercent <= 0) {
         return 0;
       }
       return Math.round(cashAmount * (reservePercent / cashPercent) * 100) / 100;
@@ -1089,12 +1090,12 @@
       eagleLands: Number(payload.eagleLands) || 0,
       withdrawalPolicy: payload.withdrawalPolicy || {
         isWithdrawDay: false,
-        cashPercent: 40,
-        reservePercent: 60,
+        cashPercent: 100,
+        reservePercent: 0,
         today: "",
         day: "Saturday",
-        eagleLandsEligible: true,
-        eagleLandsSplit: true
+        eagleLandsEligible: false,
+        eagleLandsSplit: false
       },
       withdrawals: payload.withdrawals || []
     };
