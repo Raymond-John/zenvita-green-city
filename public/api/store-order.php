@@ -32,6 +32,10 @@ if ($orderId < 1 || !in_array($status, $allowed, true)) {
     json_out(['ok' => false, 'error' => 'Choose a valid order status.'], 422);
 }
 
+// DDL (CREATE TABLE) must finish before the order/bonus transaction begins —
+// MySQL implicitly commits on DDL and would break atomicity.
+ensure_store_sales_bonus_schema($pdo);
+
 $pdo->beginTransaction();
 try {
     $order = $pdo->prepare('SELECT id, status FROM orders WHERE id = ? AND store_id = ? LIMIT 1 FOR UPDATE');

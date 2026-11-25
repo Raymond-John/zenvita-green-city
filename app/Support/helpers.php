@@ -512,22 +512,41 @@ function ensure_store_sales_bonus_schema(?PDO $pdo = null): void
         return;
     }
     $pdo = $pdo ?: db();
-    $pdo->exec(
-        "CREATE TABLE IF NOT EXISTS store_sales_bonus_awards (
-            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            store_id INT UNSIGNED NOT NULL,
-            owner_user_id INT UNSIGNED NOT NULL,
-            threshold_level INT UNSIGNED NOT NULL,
-            target_amount DECIMAL(14,2) NOT NULL,
-            bonus_amount DECIMAL(14,2) NOT NULL,
-            sales_total DECIMAL(14,2) NOT NULL,
-            reference VARCHAR(40) NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY uq_store_bonus_level (store_id, threshold_level),
-            UNIQUE KEY uq_store_bonus_reference (reference),
-            KEY idx_store_bonus_owner (owner_user_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
-    );
+
+    // Never run DDL inside an active transaction — MySQL implicitly commits on CREATE TABLE.
+    $tableExists = (bool) $pdo->query(
+        "SELECT 1
+         FROM information_schema.tables
+         WHERE table_schema = DATABASE()
+           AND table_name = 'store_sales_bonus_awards'
+         LIMIT 1"
+    )->fetchColumn();
+
+    if (!$tableExists) {
+        if ($pdo->inTransaction()) {
+            throw new RuntimeException(
+                'store_sales_bonus_awards is missing; call ensure_store_sales_bonus_schema() before beginning a transaction.'
+            );
+        }
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS store_sales_bonus_awards (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                store_id INT UNSIGNED NOT NULL,
+                owner_user_id INT UNSIGNED NOT NULL,
+                threshold_level INT UNSIGNED NOT NULL,
+                target_amount DECIMAL(14,2) NOT NULL,
+                bonus_amount DECIMAL(14,2) NOT NULL,
+                sales_total DECIMAL(14,2) NOT NULL,
+                reference VARCHAR(40) NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_store_bonus_level (store_id, threshold_level),
+                UNIQUE KEY uq_store_bonus_reference (reference),
+                KEY idx_store_bonus_owner (owner_user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+    }
+
+    // Settings inserts are DML and safe inside a transaction.
     $stmt = $pdo->prepare(
         'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)
          ON DUPLICATE KEY UPDATE setting_key = setting_key'
@@ -541,9 +560,9 @@ function ensure_store_sales_bonus_schema(?PDO $pdo = null): void
     $done = true;
 }
 
-function store_sales_bonus_config(): array
+function store_sales_bonus_config(?PDO $pdo = null): array
 {
-    ensure_store_sales_bonus_schema();
+    ensure_store_sales_bonus_schema($pdo);
     $target = max(0, (float) setting('store_sales_target', '3000000'));
     $bonus = max(0, (float) setting('store_sales_bonus', '0'));
     if ($target <= 0) {
@@ -575,8 +594,10 @@ function store_completed_sales_total(int $storeId, ?PDO $pdo = null): float
 function maybe_award_store_sales_bonuses(int $storeId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?: db();
+    // Schema/DDL must already be ensured before any outer transaction begins.
+    // This call is a no-op once warm, and refuses CREATE TABLE while inTransaction().
     ensure_store_sales_bonus_schema($pdo);
-    $config = store_sales_bonus_config();
+    $config = store_sales_bonus_config($pdo);
     $awarded = [];
     $ownsTx = false;
 
@@ -589,6 +610,7 @@ function maybe_award_store_sales_bonuses(int $storeId, ?PDO $pdo = null): array
     }
 
     try {
+        // Join the caller's transaction when present; never commit/roll it back yourself.
         if (!$pdo->inTransaction()) {
             $pdo->beginTransaction();
             $ownsTx = true;
@@ -703,7 +725,7 @@ function store_sales_bonus_summary(int $storeId, int $ownerUserId, ?PDO $pdo = n
 {
     $pdo = $pdo ?: db();
     ensure_store_sales_bonus_schema($pdo);
-    $config = store_sales_bonus_config();
+    $config = store_sales_bonus_config($pdo);
     $salesTotal = store_completed_sales_total($storeId, $pdo);
     $target = (float) $config['target'];
     $levelsEarned = $target > 0 ? (int) floor($salesTotal / $target) : 0;
