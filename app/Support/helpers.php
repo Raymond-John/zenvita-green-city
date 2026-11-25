@@ -651,7 +651,12 @@ function maybe_award_store_sales_bonuses(int $storeId, ?PDO $pdo = null): array
                     $reference,
                 ]);
             } catch (PDOException $e) {
-                continue;
+                // Only treat MySQL duplicate-key (1062) as an already-awarded race.
+                $driverCode = isset($e->errorInfo[1]) ? (int) $e->errorInfo[1] : 0;
+                if ($driverCode === 1062) {
+                    continue;
+                }
+                throw $e;
             }
 
             $pdo->prepare('UPDATE wallets SET available_balance = available_balance + ? WHERE user_id = ?')
@@ -772,23 +777,8 @@ function package_uses_eagle_lands_split(?array $user = null): bool
     if ($code === '') {
         return false;
     }
-    if (in_array($code, eagle_lands_package_codes(), true)) {
-        return true;
-    }
-    // Fallback: any package at or above Vision price also qualifies.
-    try {
-        $pdo = db();
-        $vision = $pdo->query("SELECT price FROM packages WHERE code = 'vision' LIMIT 1")->fetchColumn();
-        if ($vision === false) {
-            return false;
-        }
-        $stmt = $pdo->prepare('SELECT price FROM packages WHERE code = ? LIMIT 1');
-        $stmt->execute([$code]);
-        $price = $stmt->fetchColumn();
-        return $price !== false && (float) $price >= (float) $vision;
-    } catch (Throwable $e) {
-        return false;
-    }
+    // Strict: Vision through Platinum only (no package-price fallback).
+    return in_array($code, eagle_lands_package_codes(), true);
 }
 
 function withdrawal_policy(?array $user = null): array
