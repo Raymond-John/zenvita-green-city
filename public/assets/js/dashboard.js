@@ -19,6 +19,7 @@
         email: user.email || "",
         phone: user.phone || "",
         package: (user.package_code || "vision").toLowerCase(),
+        award_rank: user.award_rank || "Member",
         sponsor: user.sponsor_code || "",
         role: user.role || "member",
         memberCode: user.member_code || "",
@@ -161,7 +162,9 @@
     return Z.readStore("zenvitaWallet", {
       available: 42800,
       withdrawable: 17120,
+      reservedHeld: 25680,
       eagleLands: 0,
+      eagleLandsReserve: 25680,
       withdrawalPolicy: { isWithdrawDay: false, cashPercent: 40, reservePercent: 60, today: "Demo", day: "Saturday", eagleLandsEligible: true, eagleLandsSplit: true },
       withdrawals: [
         { date: "24 Sep 2026", amount: 20000, reserved: 30000, bank: "Demo Bank", account: "0123456789", name: "Adaeze Okonkwo", status: "Pending" },
@@ -197,7 +200,19 @@
     });
     var pkg = currentPackage();
     document.querySelectorAll("[data-user-package]").forEach(function (node) {
-      node.textContent = pkg.name;
+      if (node.tagName === "INPUT" || node.tagName === "TEXTAREA") {
+        node.value = pkg.name;
+      } else {
+        node.textContent = pkg.name;
+      }
+    });
+    var awardRank = (session().award_rank || session().awardRank || window.__zenvitaAwardRank || "Member");
+    document.querySelectorAll("[data-user-award-rank]").forEach(function (node) {
+      if (node.tagName === "INPUT" || node.tagName === "TEXTAREA") {
+        node.value = awardRank;
+      } else {
+        node.textContent = awardRank;
+      }
     });
   }
 
@@ -292,14 +307,32 @@
     var pairing = sumType("Pairing");
     var upgrade = sumType("Upgrade");
     var totalPv = Number(TREE.leftPv || 0) + Number(TREE.rightPv || 0) + Number(TREE.pv || 0);
+    var policy = money.withdrawalPolicy || {};
+    var splitOn = !!(policy.eagleLandsSplit || (policy.eagleLandsEligible && Number(policy.reservePercent) > 0));
+    var reservedHeld = Number(money.reservedHeld);
+    if (!isFinite(reservedHeld)) {
+      reservedHeld = splitOn
+        ? Math.round((Number(money.available) || 0) * ((Number(policy.reservePercent) || 60) / 100) * 100) / 100
+        : 0;
+    }
+    var eagleMoved = Number(money.eagleLands) || 0;
+    var eagleReserve = Number(money.eagleLandsReserve);
+    if (!isFinite(eagleReserve)) {
+      eagleReserve = Math.round((eagleMoved + reservedHeld) * 100) / 100;
+    }
+    var withdrawLabel = document.getElementById("statWithdrawableLabel");
+    if (withdrawLabel) {
+      withdrawLabel.textContent = splitOn ? "Withdrawable (40%)" : "Withdrawable";
+    }
+    var eagleLabel = document.getElementById("statEagleLandsLabel");
+    if (eagleLabel) {
+      eagleLabel.textContent = splitOn ? "Eagle land and Homes LTD Reserve (60%)" : "Eagle land and Homes LTD Reserve";
+    }
     var values = {
       statEarnings: Z.formatNaira(direct + indirect + pairing + upgrade),
       statBalance: Z.formatNaira(money.available),
       statWithdrawable: Z.formatNaira(money.withdrawable || 0),
-      statEagleLands: Z.formatNaira(money.eagleLands || 0),
-      statReserveRule: (money.withdrawalPolicy && money.withdrawalPolicy.eagleLandsSplit === false)
-        ? "No 40/60 split"
-        : "60% reserved (Vision–Platinum)",
+      statEagleLands: Z.formatNaira(eagleReserve),
       statPv: totalPv.toLocaleString("en-NG"),
       statDirect: String(TEAM.filter(function (person) { return person.generation === 1; }).length),
       statTeam: String(TEAM.length),
@@ -610,13 +643,28 @@
     function policy() {
       return (wallet().withdrawalPolicy) || {
         isWithdrawDay: false,
-        cashPercent: 100,
-        reservePercent: 0,
+        cashPercent: 40,
+        reservePercent: 60,
         today: "",
         day: "Saturday",
-        eagleLandsEligible: false,
-        eagleLandsSplit: false
+        eagleLandsEligible: true,
+        eagleLandsSplit: true
       };
+    }
+
+    function reserveTotal(data, p, splitOn) {
+      var held = Number(data.reservedHeld);
+      if (!isFinite(held)) {
+        held = splitOn
+          ? Math.round((Number(data.available) || 0) * ((Number(p.reservePercent) || 60) / 100) * 100) / 100
+          : 0;
+      }
+      var moved = Number(data.eagleLands) || 0;
+      var total = Number(data.eagleLandsReserve);
+      if (!isFinite(total)) {
+        total = Math.round((moved + held) * 100) / 100;
+      }
+      return total;
     }
 
     function usesEagleSplit() {
@@ -656,13 +704,17 @@
         withdrawableEl.textContent = Z.formatNaira(maxCash());
       }
       if (eagleEl) {
-        eagleEl.textContent = Z.formatNaira(data.eagleLands || 0);
+        eagleEl.textContent = Z.formatNaira(reserveTotal(data, p, splitOn));
+      }
+      var eagleCardLabel = document.getElementById("eagleLandsCardLabel");
+      if (eagleCardLabel) {
+        eagleCardLabel.textContent = splitOn ? "Eagle land and Homes LTD Reserve (60%)" : "Eagle land and Homes LTD Reserve";
       }
       var note = document.getElementById("withdrawPolicyNote");
       if (note) {
         note.textContent = splitOn
-          ? "Cash withdrawals are allowed only on Saturdays. Vision–Platinum plans can withdraw up to 40% as cash; the matching 60% goes to Eagle Lands & Properties."
-          : "Cash withdrawals are allowed only on Saturdays. Plans below Vision are not on the 40/60 Eagle Lands split — you can withdraw from your full available balance.";
+          ? "Cash withdrawals are allowed only on Saturdays. Vision–Platinum plans can withdraw up to 40% as cash; the matching 60% goes to Eagle land and Homes LTD."
+          : "Cash withdrawals are allowed only on Saturdays. Plans below Vision are not on the 40/60 Eagle land and Homes LTD split — you can withdraw from your full available balance.";
       }
       var withdrawableCard = document.getElementById("withdrawableCardLabel");
       if (withdrawableCard) {
@@ -675,7 +727,7 @@
       var cashHead = document.getElementById("withdrawCashHead");
       var eagleHead = document.getElementById("withdrawEagleHead");
       if (cashHead) cashHead.textContent = splitOn ? "Cash (40%)" : "Amount";
-      if (eagleHead) eagleHead.textContent = splitOn ? "Eagle Lands (60%)" : "Eagle Lands";
+      if (eagleHead) eagleHead.textContent = splitOn ? "Eagle land and Homes LTD (60%)" : "Eagle land and Homes LTD";
       if (dayBadge) {
         dayBadge.textContent = p.isWithdrawDay
           ? "Today is Saturday — withdrawals are open."
@@ -700,15 +752,15 @@
       var amount = Number(form.amount.value) || 0;
       if (!usesEagleSplit()) {
         reservePreview.textContent = amount
-          ? ("Full cash withdrawal " + Z.formatNaira(amount) + " · No Eagle Lands 40/60 split on plans below Vision.")
-          : "Enter an amount. Plans below Vision withdraw without the Eagle Lands 40/60 reduction.";
+          ? ("Full cash withdrawal " + Z.formatNaira(amount) + " · No Eagle land and Homes LTD 40/60 split on plans below Vision.")
+          : "Enter an amount. Plans below Vision withdraw without the Eagle land and Homes LTD 40/60 reduction.";
         return;
       }
       if (!amount) {
-        reservePreview.textContent = "Enter a cash amount. Matching 60% will move to Eagle Lands & Properties (Vision–Platinum).";
+        reservePreview.textContent = "Enter a cash amount. Matching 60% will move to Eagle land and Homes LTD (Vision–Platinum).";
         return;
       }
-      reservePreview.textContent = "Cash " + Z.formatNaira(amount) + " · Eagle Lands reserve " + Z.formatNaira(reservedFor(amount)) + " · Total deducted " + Z.formatNaira(amount + reservedFor(amount));
+      reservePreview.textContent = "Cash " + Z.formatNaira(amount) + " · Eagle land and Homes LTD reserve " + Z.formatNaira(reservedFor(amount)) + " · Total deducted " + Z.formatNaira(amount + reservedFor(amount));
     }
 
     form.amount.addEventListener("input", updateReservePreview);
@@ -774,6 +826,16 @@
           serverWallet.available = payload.available;
           serverWallet.withdrawable = payload.withdrawable;
           serverWallet.eagleLands = payload.eagleLands;
+          if (payload.withdrawalPolicy) {
+            serverWallet.withdrawalPolicy = payload.withdrawalPolicy;
+          }
+          var nextPolicy = serverWallet.withdrawalPolicy || {};
+          serverWallet.reservedHeld = nextPolicy.eagleLandsSplit
+            ? Math.round((Number(payload.available) || 0) * ((Number(nextPolicy.reservePercent) || 60) / 100) * 100) / 100
+            : 0;
+          serverWallet.eagleLandsReserve = Math.round(
+            ((Number(serverWallet.eagleLands) || 0) + (Number(serverWallet.reservedHeld) || 0)) * 100
+          ) / 100;
           serverWallet.withdrawals.unshift(payload.withdrawal);
           TRANSACTIONS.unshift(payload.transaction);
           if (payload.eagleTransaction) {
@@ -783,8 +845,8 @@
           paint();
           Z.showToast(
             usesEagleSplit()
-              ? "Withdrawal saved. 40% cash pending · 60% moved to Eagle Lands."
-              : "Withdrawal saved. Full cash request pending (no Eagle Lands 40/60 split).",
+              ? "Withdrawal saved. 40% cash pending · 60% moved to Eagle land and Homes LTD."
+              : "Withdrawal saved. Full cash request pending (no Eagle land and Homes LTD 40/60 split).",
             "info"
           );
         }).catch(function () {
@@ -810,8 +872,8 @@
       paint();
       Z.showToast(
         usesEagleSplit()
-          ? "Demo withdrawal saved with 40/60 Eagle Lands split."
-          : "Demo withdrawal saved without Eagle Lands 40/60 split.",
+          ? "Demo withdrawal saved with 40/60 Eagle land and Homes LTD split."
+          : "Demo withdrawal saved without Eagle land and Homes LTD 40/60 split.",
         "info"
       );
     });
@@ -827,12 +889,32 @@
       return;
     }
     var data = wallet();
-    var eagleTotal = Number(data.eagleLands);
-    if (!isFinite(eagleTotal)) {
-      eagleTotal = 0;
+    var policy = data.withdrawalPolicy || {};
+    var splitOn = !!(policy.eagleLandsSplit || (policy.eagleLandsEligible && Number(policy.reservePercent) > 0));
+    var eagleMoved = Number(data.eagleLands);
+    if (!isFinite(eagleMoved)) {
+      eagleMoved = 0;
+    }
+    var held = Number(data.reservedHeld);
+    if (!isFinite(held)) {
+      held = splitOn
+        ? Math.round((Number(data.available) || 0) * ((Number(policy.reservePercent) || 60) / 100) * 100) / 100
+        : 0;
+    }
+    var eagleReserve = Number(data.eagleLandsReserve);
+    if (!isFinite(eagleReserve)) {
+      eagleReserve = Math.round((eagleMoved + held) * 100) / 100;
     }
     if (eagle) {
-      eagle.textContent = Z.formatNaira(eagleTotal);
+      eagle.textContent = Z.formatNaira(eagleReserve);
+    }
+    var eagleLabel = document.getElementById("eagleLandsLabel");
+    if (eagleLabel) {
+      eagleLabel.textContent = splitOn ? "Eagle land and Homes LTD Reserve (60%)" : "Eagle land and Homes LTD Reserve";
+    }
+    var withdrawLabel = document.getElementById("eagleWithdrawableLabel");
+    if (withdrawLabel) {
+      withdrawLabel.textContent = splitOn ? "Withdrawable (40%)" : "Withdrawable";
     }
     if (walletEl) {
       walletEl.textContent = Z.formatNaira(data.available || 0);
@@ -876,7 +958,9 @@
       var status = document.getElementById("txStatus").value;
       var rows = extraTransactions().concat(TRANSACTIONS).filter(function (row) {
         var text = (row.id + " " + row.description + " " + row.type).toLowerCase();
-        return text.indexOf(query) !== -1 && (!type || row.type === type) && (!status || row.status === status);
+        var typeOk = !type || row.type === type
+          || (type === "Eagle land and Homes LTD" && row.type === "Eagle Lands");
+        return text.indexOf(query) !== -1 && typeOk && (!status || row.status === status);
       });
       var state = paginate(rows, page, 5);
       page = state.current;
@@ -1072,6 +1156,13 @@
   function applyPayload(payload) {
     window.__zenvitaServer = true;
     window.__zenvitaUser = payload.user;
+    window.__zenvitaAwardRank = payload.award_rank
+      || (payload.user && (payload.user.award_rank || payload.user.awardRank))
+      || "Member";
+    if (payload.user && !payload.user.award_rank) {
+      payload.user.award_rank = window.__zenvitaAwardRank;
+      window.__zenvitaUser = payload.user;
+    }
     window.__zenvitaMinWithdrawal = Number(payload.min_withdrawal) || 1000;
     if (payload.tree && payload.tree.id) {
       TREE = payload.tree;
@@ -1084,19 +1175,33 @@
     if (payload.transactions) {
       TRANSACTIONS = payload.transactions;
     }
+    var policy = payload.withdrawalPolicy || {
+      isWithdrawDay: false,
+      cashPercent: 40,
+      reservePercent: 60,
+      today: "",
+      day: "Saturday",
+      eagleLandsEligible: true,
+      eagleLandsSplit: true
+    };
+    var reservedHeld = Number(payload.reservedHeld);
+    if (!isFinite(reservedHeld)) {
+      reservedHeld = policy.eagleLandsSplit
+        ? Math.round((Number(payload.available) || 0) * ((Number(policy.reservePercent) || 60) / 100) * 100) / 100
+        : 0;
+    }
+    var eagleMoved = Number(payload.eagleLands) || 0;
+    var eagleLandsReserve = Number(payload.eagleLandsReserve);
+    if (!isFinite(eagleLandsReserve)) {
+      eagleLandsReserve = Math.round((eagleMoved + reservedHeld) * 100) / 100;
+    }
     serverWallet = {
       available: Number(payload.available) || 0,
       withdrawable: Number(payload.withdrawable) || 0,
-      eagleLands: Number(payload.eagleLands) || 0,
-      withdrawalPolicy: payload.withdrawalPolicy || {
-        isWithdrawDay: false,
-        cashPercent: 100,
-        reservePercent: 0,
-        today: "",
-        day: "Saturday",
-        eagleLandsEligible: false,
-        eagleLandsSplit: false
-      },
+      reservedHeld: reservedHeld,
+      eagleLands: eagleMoved,
+      eagleLandsReserve: eagleLandsReserve,
+      withdrawalPolicy: policy,
       withdrawals: payload.withdrawals || []
     };
     window.__zenvitaCharts = payload.charts || {};

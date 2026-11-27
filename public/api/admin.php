@@ -4,11 +4,14 @@ require __DIR__ . '/bootstrap.php';
 require_user('admin');
 $pdo = db();
 ensure_eagle_lands_schema($pdo);
+ensure_award_rank_schema($pdo);
+// Keep award ranks aligned with generation (first → end of tree).
+sync_award_ranks_by_generation($pdo);
 
 $rows = $pdo->query(
     'SELECT u.id, u.member_code, u.email, u.phone, u.first_name, u.last_name, u.status,
             u.personal_pv, u.left_pv, u.right_pv, u.binary_side, u.parent_id, u.created_at,
-            p.name AS package_name, s.member_code AS sponsor_code, par.member_code AS parent_code
+            u.award_rank, p.name AS package_name, s.member_code AS sponsor_code, par.member_code AS parent_code
      FROM users u
      LEFT JOIN packages p ON p.id = u.package_id
      LEFT JOIN users s ON s.id = u.sponsor_id
@@ -51,6 +54,7 @@ foreach ($rows as $row) {
         'email' => $row['email'] ?: '',
         'phone' => $row['phone'] ?: '',
         'package' => $row['package_name'] ?: '',
+        'awardRank' => trim((string) ($row['award_rank'] ?? '')) ?: 'Member',
         'pv' => (int) $row['personal_pv'],
         'status' => ucfirst($row['status']),
         'joined' => date('d M Y', strtotime($row['created_at'])),
@@ -189,6 +193,8 @@ json_out([
     'withdrawals' => $withdrawals,
     'transactions' => $transactions,
     'packages' => $packages,
+    'awardRanks' => award_rank_options(),
+    'awardRankLadder' => award_rank_ladder(),
     'tree' => $rootId ? member_tree($rootId) : [],
     'settings' => (static function (): array {
         ensure_smtp_settings();

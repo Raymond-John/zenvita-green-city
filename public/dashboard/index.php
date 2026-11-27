@@ -34,7 +34,7 @@
         <a class="sidebar-link" href="packages"><i class="bi bi-box-seam"></i> My Package</a>
         <a class="sidebar-link" href="order"><i class="bi bi-cart3"></i> Order products</a>
         <a class="sidebar-link" href="withdrawals"><i class="bi bi-bank"></i> Withdrawals</a>
-        <a class="sidebar-link" href="eagle-lands"><i class="bi bi-buildings"></i> Eagle Lands</a>
+        <a class="sidebar-link" href="eagle-lands"><i class="bi bi-buildings"></i> Eagle land and Homes LTD</a>
         <a class="sidebar-link" href="transactions"><i class="bi bi-receipt"></i> Transactions</a>
         <a class="sidebar-link" href="profile"><i class="bi bi-person"></i> Profile</a>
       </nav>
@@ -50,7 +50,7 @@
           <div class="dropdown-menu dropdown-menu-end notify-menu" id="notifyMenu"></div>
         </div>
         <div class="dropdown">
-          <button class="profile-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="avatar" data-user-avatar>AO</span><span class="profile-meta"><strong data-user-name>Member</strong><small>Member</small></span></button>
+          <button class="profile-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="avatar" data-user-avatar>AO</span><span class="profile-meta"><strong data-user-name>Member</strong><small data-user-award-rank>Member</small></span></button>
           <ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="profile">Profile</a></li><li><a class="dropdown-item" href="../login" data-logout>Logout</a></li></ul>
         </div>
       </header>
@@ -60,7 +60,10 @@
             <h1>Hi, <span data-user-handle>@member</span></h1>
             <p>Welcome to your Cellvigor Biorevive LTD backoffice. Signups, packages, earnings, and requests on this page come from your account.</p>
           </div>
-          <div class="package-pill">ACCOUNT PACKAGE: <span data-user-package>VISION</span></div>
+          <div class="d-flex flex-wrap gap-2 justify-content-end">
+            <div class="package-pill">ACCOUNT PACKAGE: <span data-user-package>VISION</span></div>
+            <div class="package-pill">AWARD RANK: <span data-user-award-rank>Member</span></div>
+          </div>
         </div>
         <div class="ref-bar">
           <label class="visually-hidden" for="referralLink">Referral link</label>
@@ -79,9 +82,8 @@
           <article class="wallet-card"><span>Unilevel Earnings Wallet</span><strong id="sumIndirect">…</strong><a href="commissions#indirect">Click here for more details</a></article>
         </section>
         <section class="wallet-row">
-          <article class="wallet-card"><span>Withdrawable (40%)</span><strong id="statWithdrawable">…</strong><a href="withdrawals">Saturdays only</a></article>
-          <article class="wallet-card"><span>Eagle Lands &amp; Properties</span><strong id="statEagleLands">…</strong><a href="eagle-lands">Open Eagle Lands</a></article>
-          <article class="wallet-card"><span>Reserve Rule</span><strong id="statReserveRule" style="font-size:1.05rem;">…</strong><a href="eagle-lands">Withdrawal policy</a></article>
+          <article class="wallet-card"><span id="statWithdrawableLabel">Withdrawable (40%)</span><strong id="statWithdrawable">…</strong><a href="withdrawals">Saturdays only</a></article>
+          <article class="wallet-card"><span id="statEagleLandsLabel">Eagle land and Homes LTD Reserve (60%)</span><strong id="statEagleLands">…</strong><a href="eagle-lands">Open Eagle land and Homes LTD</a></article>
         </section>
         <p class="visually-hidden" id="statPv"></p>
         <p class="visually-hidden" id="statDirect"></p>
@@ -103,9 +105,11 @@
         </section>
         <section class="office-split mb-3">
           <article class="rank-card">
-            <strong>Current package</strong>
+            <strong>Package &amp; award rank</strong>
             <div>Account package</div>
             <div class="rank-name" data-user-package>Vision</div>
+            <div class="mt-2">Award rank</div>
+            <div class="rank-name" data-user-award-rank>Member</div>
             <div>Left and right PV are the points stored on this account.</div>
           </article>
           <article class="soft-card">

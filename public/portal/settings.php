@@ -65,7 +65,7 @@
             <section class="panel" data-settings-panel="commission" hidden>
               <h2>Commission Settings</h2>
               <div class="mb-3"><label class="form-label" for="directRate">Direct referral rate (%)</label><input class="form-control" id="directRate" name="directRate" type="number" min="0" step="0.1"></div>
-              <p>Indirect generations in the published plan: 2%, 1%, 1%, 0.5%, 0.5%. Combined indirect total: 5%.</p>
+              <p>Indirect generations in the published plan: 2%, 1%, 1%, 0.5%, 0.5%, 0.5% (1st through 6th). Combined indirect total: 5.5%.</p>
             </section>
             <section class="panel" data-settings-panel="network" hidden>
               <h2>Network Settings</h2>
@@ -85,6 +85,19 @@
                 <label class="form-label" for="minWithdrawal">Minimum withdrawal amount</label>
                 <input class="form-control" id="minWithdrawal" name="minWithdrawal" type="number" min="0">
                 <p class="mt-2 mb-0 text-muted small">Minimum amount a member is required to request when withdrawing from their wallet balance.</p>
+              </div>
+              <hr>
+              <h3 class="h6">Paystack (registration)</h3>
+              <p class="text-muted small">Members must pay package price before creating an account. Paste your Paystack keys here.</p>
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label class="form-label" for="paystackPublicKey">Public key</label>
+                  <input class="form-control" id="paystackPublicKey" name="paystackPublicKey" placeholder="pk_live_… or pk_test_…">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label" for="paystackSecretKey">Secret key</label>
+                  <input class="form-control" id="paystackSecretKey" name="paystackSecretKey" type="password" placeholder="Leave blank to keep current">
+                </div>
               </div>
               <hr>
               <h3 class="h6">Store sales bonus</h3>

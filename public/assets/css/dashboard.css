@@ -374,7 +374,7 @@ body.app-body { background: #f2f4f8; background-image: none; }
 .point-card strong, .wallet-card strong, .soft-card strong { display: block; font-size: 1.8rem; margin: 0.2rem 0; }
 .point-card small { opacity: 0.9; }
 .soft-card, .wallet-card, .rank-card { background: #fff; border-radius: 16px; padding: 1rem 1.1rem; box-shadow: 0 8px 22px rgba(22, 40, 22, 0.05); }
-.wallet-row, .mini-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.9rem; margin-top: 0.9rem; }
+.wallet-row, .mini-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.9rem; margin-top: 0.9rem; }
 .rank-card { border-top: 10px solid #f0b429; text-align: center; }
 .rank-card .rank-name { font-size: 1.7rem; margin: 0.6rem 0 0.2rem; }
 .data thead th { background: #e7f6e8; color: #245028; }

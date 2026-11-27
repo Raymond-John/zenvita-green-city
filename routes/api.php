@@ -44,5 +44,7 @@ return [
         'POST /api/paystack-init.php' => 'Start Paystack payment',
         'GET  /api/paystack-callback.php' => 'Paystack callback',
         'GET  /api/paystack-status.php' => 'Payment status',
+        'POST /api/registration-proof.php' => 'Upload bank/cash payment receipt',
+        'POST /api/admin-payment-review.php' => 'Approve/reject transfer receipts',
     ],
 ];

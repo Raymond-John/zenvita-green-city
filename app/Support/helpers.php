@@ -47,7 +47,14 @@ function json_out(array $data, int $code = 200): void
 {
     http_response_code($code);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($data);
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    if ($json === false) {
+        $json = json_encode([
+            'ok' => false,
+            'error' => 'Response encoding failed.',
+        ]);
+    }
+    echo $json;
     exit;
 }
 
@@ -268,7 +275,13 @@ function ensure_registration_payments_table(?PDO $pdo = null): void
             amount DECIMAL(12,2) NOT NULL,
             package_id INT UNSIGNED NOT NULL,
             package_name VARCHAR(80) NOT NULL,
-            status ENUM('pending','paid','registered','funded') NOT NULL DEFAULT 'pending',
+            payment_method VARCHAR(20) NOT NULL DEFAULT 'paystack',
+            proof_path VARCHAR(255) NULL,
+            notes VARCHAR(255) NOT NULL DEFAULT '',
+            admin_note VARCHAR(255) NOT NULL DEFAULT '',
+            reviewed_by INT UNSIGNED NULL,
+            reviewed_at DATETIME NULL,
+            status ENUM('pending','paid','registered','funded','rejected') NOT NULL DEFAULT 'pending',
             user_id INT UNSIGNED NULL,
             funded_by INT UNSIGNED NULL,
             funded_at DATETIME NULL,
@@ -280,7 +293,80 @@ function ensure_registration_payments_table(?PDO $pdo = null): void
             KEY idx_reg_pay_user (user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
     );
+
+    $cols = $pdo->query('SHOW COLUMNS FROM registration_payments')->fetchAll(PDO::FETCH_COLUMN);
+    $add = static function (string $sql) use ($pdo): void {
+        $pdo->exec($sql);
+    };
+    if (!in_array('payment_method', $cols, true)) {
+        $add("ALTER TABLE registration_payments ADD COLUMN payment_method VARCHAR(20) NOT NULL DEFAULT 'paystack' AFTER package_name");
+    }
+    if (!in_array('proof_path', $cols, true)) {
+        $add('ALTER TABLE registration_payments ADD COLUMN proof_path VARCHAR(255) NULL AFTER payment_method');
+    }
+    if (!in_array('notes', $cols, true)) {
+        $add("ALTER TABLE registration_payments ADD COLUMN notes VARCHAR(255) NOT NULL DEFAULT '' AFTER proof_path");
+    }
+    if (!in_array('admin_note', $cols, true)) {
+        $add("ALTER TABLE registration_payments ADD COLUMN admin_note VARCHAR(255) NOT NULL DEFAULT '' AFTER notes");
+    }
+    if (!in_array('reviewed_by', $cols, true)) {
+        $add('ALTER TABLE registration_payments ADD COLUMN reviewed_by INT UNSIGNED NULL AFTER admin_note');
+    }
+    if (!in_array('reviewed_at', $cols, true)) {
+        $add('ALTER TABLE registration_payments ADD COLUMN reviewed_at DATETIME NULL AFTER reviewed_by');
+    }
+    $statusCol = $pdo->query("SHOW COLUMNS FROM registration_payments LIKE 'status'")->fetch();
+    $type = (string) ($statusCol['Type'] ?? '');
+    if ($type !== '' && stripos($type, 'rejected') === false) {
+        $pdo->exec(
+            "ALTER TABLE registration_payments
+             MODIFY COLUMN status ENUM('pending','paid','registered','funded','rejected') NOT NULL DEFAULT 'pending'"
+        );
+    }
+
     $done = true;
+}
+
+function receipt_uploads_dir(): string
+{
+    $dir = BASE_PATH . '/public/assets/uploads/receipts';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+    return $dir;
+}
+
+function store_registration_receipt_upload(array $file): string
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Receipt upload failed. Please try again.');
+    }
+    $tmp = (string) ($file['tmp_name'] ?? '');
+    if ($tmp === '' || !is_uploaded_file($tmp)) {
+        throw new RuntimeException('Invalid uploaded receipt.');
+    }
+    $size = (int) ($file['size'] ?? 0);
+    if ($size < 1 || $size > 5 * 1024 * 1024) {
+        throw new RuntimeException('Receipt must be between 1 byte and 5 MB.');
+    }
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = $finfo->file($tmp) ?: '';
+    $map = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp',
+        'application/pdf' => 'pdf',
+    ];
+    if (!isset($map[$mime])) {
+        throw new RuntimeException('Use a JPG, PNG, WEBP, or PDF receipt.');
+    }
+    $name = 'receipt_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $map[$mime];
+    $dest = receipt_uploads_dir() . DIRECTORY_SEPARATOR . $name;
+    if (!move_uploaded_file($tmp, $dest)) {
+        throw new RuntimeException('Could not save the receipt.');
+    }
+    return 'uploads/receipts/' . $name;
 }
 
 function app_root_url(): string
@@ -377,16 +463,141 @@ function verify_paystack_reference(string $reference): array
     return ['ok' => true, 'data' => $data];
 }
 
+function ensure_award_rank_schema(?PDO $pdo = null): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $pdo = $pdo ?: db();
+    $cols = $pdo->query('SHOW COLUMNS FROM users')->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('award_rank', $cols, true)) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN award_rank VARCHAR(60) NOT NULL DEFAULT 'Member' AFTER package_id");
+    }
+    $done = true;
+}
+
+function award_rank_options(): array
+{
+    return [
+        'Member',
+        '1 Star',
+        '2 Star',
+        '3 Star',
+        'Bronze',
+        'Silver',
+        'Gold',
+        'Diamond',
+        'Crown',
+        'Ambassador',
+    ];
+}
+
+/**
+ * Indirect (unilevel) commission % for generations 1 through 6
+ * above the direct sponsor. Combined total: 5.5%.
+ */
+function indirect_generation_rates(): array
+{
+    return [2, 1, 1, 0.5, 0.5, 0.5];
+}
+
+/**
+ * Generation ladder from root (first) down to the deepest end.
+ * Gen 0 = Ambassador ? later gens step down until Member.
+ */
+function award_rank_ladder(): array
+{
+    return [
+        'Ambassador',
+        'Crown',
+        'Diamond',
+        'Gold',
+        'Silver',
+        'Bronze',
+        '3 Star',
+        '2 Star',
+        '1 Star',
+        'Member',
+    ];
+}
+
+function award_rank_for_generation(int $generation): string
+{
+    $ladder = award_rank_ladder();
+    $generation = max(0, $generation);
+    if ($generation >= count($ladder)) {
+        return 'Member';
+    }
+    return $ladder[$generation];
+}
+
+/**
+ * Recalculate every member's award_rank from binary-tree generation.
+ * Returns number of rows updated.
+ */
+function sync_award_ranks_by_generation(?PDO $pdo = null): int
+{
+    $pdo = $pdo ?: db();
+    ensure_award_rank_schema($pdo);
+
+    $rows = $pdo->query(
+        "SELECT id, parent_id, award_rank
+         FROM users
+         WHERE role = 'member'"
+    )->fetchAll();
+    if (!$rows) {
+        return 0;
+    }
+
+    $byId = [];
+    foreach ($rows as $row) {
+        $byId[(int) $row['id']] = $row;
+    }
+
+    $generationOf = static function (array $row) use ($byId): int {
+        $count = 0;
+        $current = $row;
+        $guard = 0;
+        while (!empty($current['parent_id']) && $guard < 50) {
+            $count++;
+            $parent = $byId[(int) $current['parent_id']] ?? null;
+            if (!$parent) {
+                break;
+            }
+            $current = $parent;
+            $guard++;
+        }
+        return $count;
+    };
+
+    $update = $pdo->prepare('UPDATE users SET award_rank = ? WHERE id = ? AND award_rank <> ?');
+    $changed = 0;
+    foreach ($rows as $row) {
+        $rank = award_rank_for_generation($generationOf($row));
+        $current = trim((string) ($row['award_rank'] ?? '')) ?: 'Member';
+        if ($current === $rank) {
+            continue;
+        }
+        // Only rewrite when the stored value differs from the target rank.
+        $update->execute([$rank, (int) $row['id'], $rank]);
+        $changed += $update->rowCount() > 0 ? 1 : 0;
+    }
+    return $changed;
+}
+
 function current_user(): ?array
 {
     start_session();
     if (empty($_SESSION['user_id'])) {
         return null;
     }
+    ensure_award_rank_schema();
     $stmt = db()->prepare(
         'SELECT u.id, u.member_code, u.username, u.email, u.phone, u.first_name, u.last_name,
                 u.role, u.status, u.personal_pv, u.left_pv, u.right_pv, u.binary_side,
                 u.city, u.country, u.bank_name, u.account_name, u.account_number,
+                u.award_rank,
                 p.code AS package_code, p.name AS package_name,
                 s.member_code AS sponsor_code
          FROM users u
@@ -433,8 +644,8 @@ function member_tree(int $userId): array
             'status' => $row['status'],
             'position' => $generation === 0 ? 'Root' : ucfirst((string) $row['binary_side']),
             'generation' => $generation,
-            'sponsor' => $row['sponsor_code'] ?: '—',
-            'parent' => $row['parent_code'] ?: '—',
+            'sponsor' => $row['sponsor_code'] ?: '-',
+            'parent' => $row['parent_code'] ?: '-',
             'leftPv' => $generation === 0 ? (int) $row['left_pv'] : null,
             'rightPv' => $generation === 0 ? (int) $row['right_pv'] : null,
             'isYou' => $generation === 0,
@@ -513,7 +724,7 @@ function ensure_store_sales_bonus_schema(?PDO $pdo = null): void
     }
     $pdo = $pdo ?: db();
 
-    // Never run DDL inside an active transaction — MySQL implicitly commits on CREATE TABLE.
+    // Never run DDL inside an active transaction � MySQL implicitly commits on CREATE TABLE.
     $tableExists = (bool) $pdo->query(
         "SELECT 1
          FROM information_schema.tables
@@ -589,7 +800,7 @@ function store_completed_sales_total(int $storeId, ?PDO $pdo = null): float
 
 /**
  * Award repeating store sales bonuses each time completed sales cross the admin target
- * (default ₦3,000,000). Bonus amount is set by admin.
+ * (default ?3,000,000). Bonus amount is set by admin.
  */
 function maybe_award_store_sales_bonuses(int $storeId, ?PDO $pdo = null): array
 {
@@ -691,7 +902,7 @@ function maybe_award_store_sales_bonuses(int $storeId, ?PDO $pdo = null): array
             )->execute([
                 $ownerId,
                 $reference,
-                'Store sales bonus for reaching ₦' . number_format($milestone, 0) . ' completed sales',
+                'Store sales bonus for reaching ?' . number_format($milestone, 0) . ' completed sales',
                 $config['bonus'],
             ]);
 
@@ -781,7 +992,7 @@ function store_sales_bonus_summary(int $storeId, int $ownerUserId, ?PDO $pdo = n
 }
 
 /**
- * Eagle Lands 40/60 split applies only from Vision through Platinum.
+ * Eagle land and Homes LTD 40/60 split applies only from Vision through Platinum.
  * Plans below Vision (or no package) withdraw without that reduction.
  */
 function eagle_lands_package_codes(): array

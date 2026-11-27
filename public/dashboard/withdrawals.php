@@ -31,7 +31,7 @@
         <a class="sidebar-link" href="packages"><i class="bi bi-box-seam"></i> My Package</a>
         <a class="sidebar-link" href="order"><i class="bi bi-cart3"></i> Order products</a>
         <a class="sidebar-link is-active" aria-current="page" href="withdrawals"><i class="bi bi-bank"></i> Withdrawals</a>
-        <a class="sidebar-link" href="eagle-lands"><i class="bi bi-buildings"></i> Eagle Lands</a>
+        <a class="sidebar-link" href="eagle-lands"><i class="bi bi-buildings"></i> Eagle land and Homes LTD</a>
         <a class="sidebar-link" href="transactions"><i class="bi bi-receipt"></i> Transactions</a>
         <a class="sidebar-link" href="profile"><i class="bi bi-person"></i> Profile</a>
       </nav>
@@ -43,14 +43,14 @@
         <button class="icon-btn menu-toggle" id="sidebarToggle" type="button" aria-expanded="false" aria-controls="appSidebar" aria-label="Open menu"><i class="bi bi-list"></i></button>
         <div class="topbar-title"><strong>Withdrawals</strong><small>Saturdays only · 40% cash</small></div>
         <div class="dropdown"><button class="icon-btn" type="button" data-bs-toggle="dropdown" aria-label="Notifications"><i class="bi bi-bell"></i><span class="notify-dot" id="notifyDot"></span></button><div class="dropdown-menu dropdown-menu-end notify-menu" id="notifyMenu"></div></div>
-        <div class="dropdown"><button class="profile-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="avatar" data-user-avatar>AO</span><span class="profile-meta"><strong data-user-name>Member</strong><small>Member</small></span></button><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="profile">Profile</a></li><li><a class="dropdown-item" href="../login" data-logout>Logout</a></li></ul></div>
+        <div class="dropdown"><button class="profile-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="avatar" data-user-avatar>AO</span><span class="profile-meta"><strong data-user-name>Member</strong><small data-user-award-rank>Member</small></span></button><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="profile">Profile</a></li><li><a class="dropdown-item" href="../login" data-logout>Logout</a></li></ul></div>
       </header>
       <main class="app-content" id="main">
-        <div class="page-head"><div><h1>Request a withdrawal</h1><p id="withdrawPolicyNote">Cash withdrawals are allowed only on Saturdays. Vision–Platinum plans use the 40/60 Eagle Lands split; plans below Vision do not.</p></div></div>
+        <div class="page-head"><div><h1>Request a withdrawal</h1><p id="withdrawPolicyNote">Cash withdrawals are allowed only on Saturdays. Vision–Platinum plans use the 40/60 Eagle land and Homes LTD split; plans below Vision do not.</p></div></div>
         <section class="wallet-row mb-3">
           <article class="wallet-card"><span>Wallet Balance</span><strong id="availableBalance">…</strong></article>
           <article class="wallet-card"><span id="withdrawableCardLabel">Withdrawable Now (40%)</span><strong id="withdrawableBalance">…</strong></article>
-          <article class="wallet-card"><span>Eagle Lands Reserve</span><strong id="eagleLandsBalance">…</strong><a href="eagle-lands">Open Eagle Lands</a></article>
+          <article class="wallet-card"><span id="eagleLandsCardLabel">Eagle land and Homes LTD Reserve (60%)</span><strong id="eagleLandsBalance">…</strong><a href="eagle-lands">Open Eagle land and Homes LTD</a></article>
         </section>
         <section class="withdraw-layout">
           <form class="panel" id="withdrawalForm" novalidate>
@@ -65,7 +65,7 @@
             <h2>Withdrawal history</h2>
             <div class="table-wrap">
               <table class="data withdrawal-table">
-                <thead><tr><th>Date</th><th id="withdrawCashHead">Cash (40%)</th><th id="withdrawEagleHead">Eagle Lands (60%)</th><th>Bank</th><th>Status</th></tr></thead>
+                <thead><tr><th>Date</th><th id="withdrawCashHead">Cash (40%)</th><th id="withdrawEagleHead">Eagle land and Homes LTD (60%)</th><th>Bank</th><th>Status</th></tr></thead>
                 <tbody id="withdrawalBody"><tr><td class="loading-row" colspan="5">Loading records…</td></tr></tbody>
               </table>
             </div>

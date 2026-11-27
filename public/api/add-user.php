@@ -16,6 +16,9 @@ $phone = trim((string) ($body['phone'] ?? ''));
 $packageName = trim((string) ($body['package'] ?? 'Vision'));
 $side = strtolower(trim((string) ($body['side'] ?? '')));
 $sponsorName = trim((string) ($body['sponsor'] ?? ''));
+$paymentReference = trim((string) ($body['paymentReference'] ?? ''));
+// Public self-registration must pay first. Portal admin / logged-in member downline signup can bypass.
+$requiresPayment = !$actor;
 
 if (!preg_match('/^[A-Za-z0-9._-]{3,60}$/', $username)) {
     json_out(['ok' => false, 'error' => 'Use a username of at least 3 letters or numbers.'], 422);
@@ -34,11 +37,45 @@ if (strlen(preg_replace('/\D+/', '', $phone)) < 10 || strlen($phone) > 30) {
 }
 
 $pdo = db();
+ensure_registration_payments_table($pdo);
+ensure_award_rank_schema($pdo);
 $package = $pdo->prepare('SELECT id, name, price, pv, direct_bonus FROM packages WHERE name = ? OR code = ? LIMIT 1');
 $package->execute([$packageName, strtolower($packageName)]);
 $packageRow = $package->fetch();
 if (!$packageRow) {
     json_out(['ok' => false, 'error' => 'Choose a package.'], 422);
+}
+
+$paymentRow = null;
+if ($requiresPayment) {
+    start_session();
+    if ($paymentReference === '') {
+        $paymentReference = trim((string) ($_SESSION['reg_payment_ref'] ?? ''));
+    }
+    if ($paymentReference === '') {
+        json_out([
+            'ok' => false,
+            'error' => 'Complete package payment with Paystack or get an admin-approved receipt before registering.',
+        ], 422);
+    }
+    $payStmt = $pdo->prepare('SELECT * FROM registration_payments WHERE reference = ? LIMIT 1');
+    $payStmt->execute([$paymentReference]);
+    $paymentRow = $payStmt->fetch();
+    if (!$paymentRow || $paymentRow['status'] !== 'paid') {
+        json_out([
+            'ok' => false,
+            'error' => 'Payment is not approved yet. Finish Paystack checkout or wait for admin receipt approval.',
+        ], 422);
+    }
+    if (strcasecmp((string) $paymentRow['email'], $email) !== 0) {
+        json_out(['ok' => false, 'error' => 'Register with the same email used for payment.'], 422);
+    }
+    if (
+        strcasecmp((string) $paymentRow['package_name'], $packageRow['name']) !== 0
+        && (int) $paymentRow['package_id'] !== (int) $packageRow['id']
+    ) {
+        json_out(['ok' => false, 'error' => 'Register with the same package you paid for.'], 422);
+    }
 }
 
 $taken = $pdo->prepare('SELECT id FROM users WHERE username = ? LIMIT 1');
@@ -107,11 +144,31 @@ if ($actor && $actor['role'] === 'member') {
     $binarySide = $placed['side'];
 }
 
+// Award rank follows binary generation from root (first) to the deepest end.
+$generation = 0;
+if ($parentId) {
+    $genStmt = $pdo->prepare('SELECT parent_id FROM users WHERE id = ?');
+    $walk = (int) $parentId;
+    $guard = 0;
+    $generation = 1;
+    while ($walk > 0 && $guard < 50) {
+        $genStmt->execute([$walk]);
+        $nextParent = $genStmt->fetchColumn();
+        if ($nextParent === false || $nextParent === null || (int) $nextParent < 1) {
+            break;
+        }
+        $generation++;
+        $walk = (int) $nextParent;
+        $guard++;
+    }
+}
+$awardRank = award_rank_for_generation($generation);
+
 $pdo->beginTransaction();
 try {
     $pdo->prepare(
-        'INSERT INTO users (member_code, username, email, phone, password_hash, first_name, last_name, role, package_id, sponsor_id, parent_id, binary_side, status, personal_pv, country)
-         VALUES (NULL, ?, ?, ?, ?, ?, ?, \'member\', ?, ?, ?, ?, \'active\', ?, \'Nigeria\')'
+        'INSERT INTO users (member_code, username, email, phone, password_hash, first_name, last_name, role, package_id, award_rank, sponsor_id, parent_id, binary_side, status, personal_pv, country)
+         VALUES (NULL, ?, ?, ?, ?, ?, ?, \'member\', ?, ?, ?, ?, ?, \'active\', ?, \'Nigeria\')'
     )->execute([
         $username,
         $email,
@@ -120,6 +177,7 @@ try {
         $first,
         $last,
         $packageRow['id'],
+        $awardRank,
         $sponsorId,
         $parentId,
         $binarySide,
@@ -129,6 +187,15 @@ try {
     $code = 'ZGV' . str_pad((string) $userId, 5, '0', STR_PAD_LEFT);
     $pdo->prepare('UPDATE users SET member_code = ? WHERE id = ?')->execute([$code, $userId]);
     $pdo->prepare('INSERT INTO wallets (user_id, available_balance) VALUES (?, 0)')->execute([$userId]);
+
+    if ($paymentRow) {
+        $pdo->prepare(
+            "UPDATE registration_payments
+             SET status = 'registered', user_id = ?, updated_at = NOW()
+             WHERE reference = ? AND status = 'paid'"
+        )->execute([$userId, $paymentRow['reference']]);
+        unset($_SESSION['reg_payment_ref']);
+    }
 
     if ($sponsorId) {
         add_leg_pv($pdo, $parentId, $binarySide, (int) $packageRow['pv']);
@@ -190,7 +257,8 @@ function open_seat(PDO $pdo, int $startId, string $side): array
 
 function pay_indirect(PDO $pdo, int $newUserId, string $newName, int $sponsorId, array $packageRow): void
 {
-    $rates = [2, 1, 1, 0.5, 0.5];
+    // Gen 1–6 upline of the sponsor receive indirect (unilevel) commission.
+    $rates = indirect_generation_rates();
     $upline = $pdo->prepare('SELECT sponsor_id FROM users WHERE id = ?');
     $status = $pdo->prepare('SELECT status FROM users WHERE id = ?');
     $current = $sponsorId;

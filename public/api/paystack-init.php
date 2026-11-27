@@ -50,8 +50,9 @@ $reference = 'ZGV-REG-' . date('ymdHis') . '-' . strtoupper(substr(bin2hex(rando
 $callback = app_root_url() . '/api/paystack-callback';
 
 $pdo->prepare(
-    'INSERT INTO registration_payments (reference, email, amount, package_id, package_name, status)
-     VALUES (?, ?, ?, ?, ?, \'pending\')'
+    'INSERT INTO registration_payments
+        (reference, email, amount, package_id, package_name, payment_method, status)
+     VALUES (?, ?, ?, ?, ?, \'paystack\', \'pending\')'
 )->execute([
     $reference,
     $email,

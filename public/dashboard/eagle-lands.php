@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Eagle Lands &amp; Properties · Cellvigor Biorevive LTD</title>
+  <title>Eagle land and Homes LTD · Cellvigor Biorevive LTD</title>
   <link rel="icon" href="../assets/images/cellvigor-logo.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,7 +31,7 @@
         <a class="sidebar-link" href="packages"><i class="bi bi-box-seam"></i> My Package</a>
         <a class="sidebar-link" href="order"><i class="bi bi-cart3"></i> Order products</a>
         <a class="sidebar-link" href="withdrawals"><i class="bi bi-bank"></i> Withdrawals</a>
-        <a class="sidebar-link is-active" aria-current="page" href="eagle-lands"><i class="bi bi-buildings"></i> Eagle Lands</a>
+        <a class="sidebar-link is-active" aria-current="page" href="eagle-lands"><i class="bi bi-buildings"></i> Eagle land and Homes LTD</a>
         <a class="sidebar-link" href="transactions"><i class="bi bi-receipt"></i> Transactions</a>
         <a class="sidebar-link" href="profile"><i class="bi bi-person"></i> Profile</a>
       </nav>
@@ -41,42 +41,42 @@
     <div class="app-main">
       <header class="app-topbar">
         <button class="icon-btn menu-toggle" id="sidebarToggle" type="button" aria-expanded="false" aria-controls="appSidebar" aria-label="Open menu"><i class="bi bi-list"></i></button>
-        <div class="topbar-title"><strong>Eagle Lands &amp; Properties</strong><small>Reserved 60%</small></div>
+        <div class="topbar-title"><strong>Eagle land and Homes LTD</strong><small>Reserved 60%</small></div>
         <div class="dropdown"><button class="icon-btn" type="button" data-bs-toggle="dropdown" aria-label="Notifications"><i class="bi bi-bell"></i><span class="notify-dot" id="notifyDot"></span></button><div class="dropdown-menu dropdown-menu-end notify-menu" id="notifyMenu"></div></div>
-        <div class="dropdown"><button class="profile-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="avatar" data-user-avatar>AO</span><span class="profile-meta"><strong data-user-name>Member</strong><small>Member</small></span></button><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="profile">Profile</a></li><li><a class="dropdown-item" href="../login" data-logout>Logout</a></li></ul></div>
+        <div class="dropdown"><button class="profile-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="avatar" data-user-avatar>AO</span><span class="profile-meta"><strong data-user-name>Member</strong><small data-user-award-rank>Member</small></span></button><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="profile">Profile</a></li><li><a class="dropdown-item" href="../login" data-logout>Logout</a></li></ul></div>
       </header>
       <main class="app-content" id="main">
-        <div class="page-head"><div><h1>Eagle Lands &amp; Properties</h1><p>For Vision–Platinum plans, 60% of every Saturday withdrawal cycle is reserved here. Plans below Vision are not on the 40/60 reduction.</p></div></div>
+        <div class="page-head"><div><h1>Eagle land and Homes LTD</h1><p>For Vision–Platinum plans, 60% of your wallet is reserved for Eagle land and Homes LTD. That reserve is shown here now; on Saturday cash-out the matching 60% is locked into the moved reserve.</p></div></div>
         <section class="wallet-row mb-3">
-          <article class="wallet-card"><span>Eagle Lands Reserve</span><strong id="eagleLandsBalance">…</strong><a href="transactions">View related transactions</a></article>
+          <article class="wallet-card"><span id="eagleLandsLabel">Eagle land and Homes LTD Reserve (60%)</span><strong id="eagleLandsBalance">…</strong><a href="transactions">View related transactions</a></article>
           <article class="wallet-card"><span>Wallet Balance</span><strong id="eagleWalletBalance">…</strong><a href="withdrawals">Open withdrawals</a></article>
-          <article class="wallet-card"><span>Withdrawable (40%)</span><strong id="eagleWithdrawable">…</strong><a href="withdrawals">Request on Saturday</a></article>
+          <article class="wallet-card"><span id="eagleWithdrawableLabel">Withdrawable (40%)</span><strong id="eagleWithdrawable">…</strong><a href="withdrawals">Request on Saturday</a></article>
         </section>
         <section class="panel mb-3">
           <div class="panel-head"><h2>Reserve history</h2></div>
-          <p class="text-muted small">Each Saturday cash withdrawal moves a matching 60% into Eagle Lands. Those reserved amounts are listed here.</p>
+          <p class="text-muted small">Each Saturday cash withdrawal moves a matching 60% into Eagle land and Homes LTD. Those reserved amounts are listed here.</p>
           <div class="table-wrap" id="eagleReserveWrap">
             <table class="data">
               <thead>
                 <tr>
                   <th>Date</th>
                   <th>Cash (40%)</th>
-                  <th>Eagle Lands (60%)</th>
+                  <th>Eagle land and Homes LTD (60%)</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody id="eagleReserveBody"><tr><td class="loading-row" colspan="4">Loading reserve history…</td></tr></tbody>
             </table>
           </div>
-          <div class="empty-state" id="eagleReserveEmpty" hidden>No Eagle Lands reserves yet. They appear when you request a Saturday withdrawal.</div>
+          <div class="empty-state" id="eagleReserveEmpty" hidden>No Eagle land and Homes LTD reserves yet. They appear when you request a Saturday withdrawal.</div>
         </section>
         <section class="panel">
           <h2>How it works</h2>
           <ul class="mb-0">
             <li>Cash withdrawals are allowed only on <strong>Saturdays</strong>.</li>
             <li>Vision–Platinum members may withdraw up to <strong>40%</strong> of available balance as cash.</li>
-            <li>For those plans, the matching <strong>60%</strong> is moved into this Eagle Lands &amp; Properties reserve.</li>
-            <li>Plans below Vision are not on the 40/60 split and can withdraw without that Eagle Lands reduction.</li>
+            <li>For those plans, the matching <strong>60%</strong> is moved into this Eagle land and Homes LTD reserve.</li>
+            <li>Plans below Vision are not on the 40/60 split and can withdraw without that Eagle land and Homes LTD reduction.</li>
           </ul>
         </section>
       </main>

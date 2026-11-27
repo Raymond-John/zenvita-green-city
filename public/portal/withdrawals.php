@@ -45,10 +45,10 @@
         <div class="dropdown"><button class="profile-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="avatar">AD</span><span class="profile-meta"><strong>Admin</strong><small>PORTAL</small></span></button><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="settings">Settings</a></li><li><a class="dropdown-item" href="login" data-logout>Logout</a></li></ul></div>
       </header>
       <main class="app-content" id="main">
-        <div class="page-head"><div><h1>Withdrawal requests</h1><p>Cash is 40%. Matching 60% is reserved for Eagle Lands &amp; Properties. Withdrawals are member-requested on Saturdays only.</p></div></div>
+        <div class="page-head"><div><h1>Withdrawal requests</h1><p>Cash is 40%. Matching 60% is reserved for Eagle land and Homes LTD. Withdrawals are member-requested on Saturdays only.</p></div></div>
         <section class="panel">
           <div class="table-wrap">
-            <table class="data"><thead><tr><th>Member</th><th>Cash (40%)</th><th>Eagle Lands (60%)</th><th>Bank</th><th>Account</th><th>Date</th><th>Status</th><th>Action</th></tr></thead><tbody id="adminWithdrawalBody"><tr><td class="loading-row" colspan="8">Loading records…</td></tr></tbody></table>
+            <table class="data"><thead><tr><th>Member</th><th>Cash (40%)</th><th>Eagle land and Homes LTD (60%)</th><th>Bank</th><th>Account</th><th>Date</th><th>Status</th><th>Action</th></tr></thead><tbody id="adminWithdrawalBody"><tr><td class="loading-row" colspan="8">Loading records…</td></tr></tbody></table>
           </div>
         </section>
       </main>

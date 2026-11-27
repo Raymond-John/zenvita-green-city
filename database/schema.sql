@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
   last_name VARCHAR(80) NOT NULL DEFAULT '',
   role ENUM('member','admin','store') NOT NULL DEFAULT 'member',
   package_id INT UNSIGNED NULL,
+  award_rank VARCHAR(60) NOT NULL DEFAULT 'Member',
   sponsor_id INT UNSIGNED NULL,
   parent_id INT UNSIGNED NULL,
   binary_side ENUM('left','right') NULL,

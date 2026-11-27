@@ -50,8 +50,8 @@ ensure_registration_payments_table();
       <main class="app-content" id="main">
         <div class="page-head">
           <div>
-            <h1>Wallet funding</h1>
-            <p>Fund a member wallet manually. Online Paystack registration payment is disabled.</p>
+            <h1>Payments</h1>
+            <p>Approve bank/cash receipts, review Paystack registrations, and fund member wallets.</p>
           </div>
         </div>
 
@@ -89,10 +89,13 @@ ensure_registration_payments_table();
                 <tr>
                   <th>Date</th>
                   <th>Reference</th>
+                  <th>Method</th>
                   <th>Email / Member</th>
                   <th>Package</th>
                   <th>Amount</th>
+                  <th>Receipt</th>
                   <th>Status</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="paymentsBody"></tbody>

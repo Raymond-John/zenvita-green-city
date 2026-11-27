@@ -49,11 +49,11 @@ try {
             $refundRef = 'TX-' . date('ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(2)), 0, 4));
             $pdo->prepare(
                 'INSERT INTO transactions (user_id, reference, tx_type, description, amount, status, tx_date)
-                 VALUES (?, ?, \'Eagle Lands\', ?, ?, \'Approved\', CURDATE())'
+                 VALUES (?, ?, \'Eagle land and Homes LTD\', ?, ?, \'Approved\', CURDATE())'
             )->execute([
                 $row['user_id'],
                 $refundRef,
-                'Eagle Lands reserve returned after withdrawal rejection',
+                'Eagle land and Homes LTD reserve returned after withdrawal rejection',
                 $reserved,
             ]);
         }

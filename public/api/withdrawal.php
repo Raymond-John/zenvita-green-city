@@ -48,7 +48,7 @@ try {
         if (!empty($policy['eagleLandsSplit'])) {
             json_out([
                 'ok' => false,
-                'error' => 'You can withdraw only ' . (int) $policy['cashPercent'] . '% of your balance (max ₦' . number_format($maxCash, 0) . '). The remaining ' . (int) $policy['reservePercent'] . '% goes to Eagle Lands & Properties (Vision–Platinum plans).',
+                'error' => 'You can withdraw only ' . (int) $policy['cashPercent'] . '% of your balance (max ₦' . number_format($maxCash, 0) . '). The remaining ' . (int) $policy['reservePercent'] . '% goes to Eagle land and Homes LTD (Vision–Platinum plans).',
             ], 422);
         }
         json_out([
@@ -58,7 +58,7 @@ try {
     }
     if ($split['total'] > $available + 0.00001) {
         $pdo->rollBack();
-        json_out(['ok' => false, 'error' => 'Not enough balance for this withdrawal' . (!empty($split['eagleLandsSplit']) ? ' plus Eagle Lands reserve.' : '.')], 422);
+        json_out(['ok' => false, 'error' => 'Not enough balance for this withdrawal' . (!empty($split['eagleLandsSplit']) ? ' plus Eagle land and Homes LTD reserve.' : '.')], 422);
     }
 
     $pdo->prepare(
@@ -87,11 +87,11 @@ try {
         $eagleRef = 'TX-' . date('ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(2)), 0, 4));
         $pdo->prepare(
             'INSERT INTO transactions (user_id, reference, tx_type, description, amount, status, tx_date)
-             VALUES (?, ?, \'Eagle Lands\', ?, ?, \'Approved\', CURDATE())'
+             VALUES (?, ?, \'Eagle land and Homes LTD\', ?, ?, \'Approved\', CURDATE())'
         )->execute([
             $user['id'],
             $eagleRef,
-            'Reserved for Eagle Lands & Properties (60%)',
+            'Reserved for Eagle land and Homes LTD (60%)',
             -$split['reserved'],
         ]);
     }
@@ -134,8 +134,8 @@ if ($eagleRef) {
     $response['eagleTransaction'] = [
         'date' => date('d M Y'),
         'id' => $eagleRef,
-        'type' => 'Eagle Lands',
-        'description' => 'Reserved for Eagle Lands & Properties (60%)',
+        'type' => 'Eagle land and Homes LTD',
+        'description' => 'Reserved for Eagle land and Homes LTD (60%)',
         'amount' => -$split['reserved'],
         'status' => 'Approved',
     ];

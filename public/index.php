@@ -31,7 +31,7 @@ foreach ($landingProducts as $row) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Cellvigor Biorevive LTD</title>
-  <meta name="description" content="Cellvigor Biorevive LTD — herbal wellness products, member registration, product orders, network growth, and Eagle Lands reserves. Register to get started.">
+  <meta name="description" content="Cellvigor Biorevive LTD — herbal wellness products, member registration, product orders, network growth, and Eagle land and Homes LTD reserves. Register to get started.">
   <link rel="icon" href="assets/images/cellvigor-logo.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -90,7 +90,7 @@ foreach ($landingProducts as $row) {
       <div class="landing-section-inner">
         <span class="landing-kicker">The company</span>
         <h2 id="about-title">What Cellvigor Biorevive LTD is</h2>
-        <p class="landing-lead">Cellvigor Biorevive LTD is a wellness and member platform built around natural herbal products. Members register, order products through approved stores, track earnings, grow a binary network, and take part in the Eagle Lands &amp; Properties reserve.</p>
+        <p class="landing-lead">Cellvigor Biorevive LTD is a wellness and member platform built around natural herbal products. Members register, order products through approved stores, track earnings, grow a binary network, and take part in the Eagle land and Homes LTD reserve.</p>
         <div class="landing-split">
           <div>
             <h3>For your health</h3>
@@ -98,7 +98,7 @@ foreach ($landingProducts as $row) {
           </div>
           <div>
             <h3>For your membership</h3>
-            <p>Once registered, you get a member dashboard for packages, product orders, commissions, withdrawals, network growth, and your Eagle Lands reserve balance.</p>
+            <p>Once registered, you get a member dashboard for packages, product orders, commissions, withdrawals, network growth, and your Eagle land and Homes LTD reserve balance.</p>
           </div>
         </div>
       </div>
@@ -196,8 +196,8 @@ foreach ($landingProducts as $row) {
             <span>Cash withdrawals open on Saturdays only. You can withdraw up to 40% of your wallet balance.</span>
           </li>
           <li>
-            <strong>Build Eagle Lands</strong>
-            <span>The matching 60% is reserved into Eagle Lands &amp; Properties — a dedicated section in your account.</span>
+            <strong>Build Eagle land and Homes LTD</strong>
+            <span>The matching 60% is reserved into Eagle land and Homes LTD — a dedicated section in your account.</span>
           </li>
         </ol>
       </div>
@@ -222,7 +222,7 @@ foreach ($landingProducts as $row) {
             <p>Follow direct, indirect, pairing, and upgrade earnings while your binary tree expands.</p>
           </div>
           <div>
-            <h3>Eagle Lands &amp; Properties</h3>
+            <h3>Eagle land and Homes LTD</h3>
             <p>View the reserved 60% balance set aside whenever you process a Saturday withdrawal.</p>
           </div>
         </div>

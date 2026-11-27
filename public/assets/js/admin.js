@@ -139,7 +139,9 @@
         var statusAction = member.status === "Suspended"
           ? '<button class="btn btn-brand btn-sm" data-activate="' + member.id + '">Activate</button>'
           : '<button class="btn btn-reject btn-sm" data-suspend="' + member.id + '">Suspend</button>';
-        return "<tr><td>" + Z.escapeHtml(member.id) + '</td><td><span class="name-with-face"><span class="person-face" aria-hidden="true">' + Z.humanFace() + '</span>' + Z.escapeHtml(member.name) + "</span></td><td>" + Z.escapeHtml(member.email) + "</td><td>" + Z.escapeHtml(member.phone) + "</td><td>" + Z.escapeHtml(member.package) + "</td><td>" + member.pv + '</td><td><span class="' + Z.statusClass(member.status) + '">' + Z.escapeHtml(member.status) + "</span></td><td>" + Z.escapeHtml(member.joined) + '</td><td><div class="action-row"><button class="btn btn-soft btn-sm" data-view="' + member.id + '">View</button><button class="btn btn-soft btn-sm" data-edit="' + member.id + '">Edit</button>' + statusAction + '</div></td></tr>';
+        var rankLabel = Z.escapeHtml(member.awardRank || "Member") +
+          (typeof member.generation === "number" ? ' <small class="text-muted">(Gen ' + member.generation + ")</small>" : "");
+        return "<tr><td>" + Z.escapeHtml(member.id) + '</td><td><span class="name-with-face"><span class="person-face" aria-hidden="true">' + Z.humanFace() + '</span>' + Z.escapeHtml(member.name) + "</span></td><td>" + Z.escapeHtml(member.email) + "</td><td>" + Z.escapeHtml(member.phone) + "</td><td>" + Z.escapeHtml(member.package) + "</td><td>" + rankLabel + "</td><td>" + member.pv + '</td><td><span class="' + Z.statusClass(member.status) + '">' + Z.escapeHtml(member.status) + "</span></td><td>" + Z.escapeHtml(member.joined) + '</td><td><div class="action-row"><button class="btn btn-soft btn-sm" data-view="' + member.id + '">View</button><button class="btn btn-soft btn-sm" data-edit="' + member.id + '">Edit</button>' + statusAction + '</div></td></tr>';
       }).join("");
       document.getElementById("memberEmpty").hidden = state.total > 0;
       document.getElementById("memberTableWrap").hidden = state.total === 0;
@@ -153,9 +155,12 @@
       var list = members();
       if (view) {
         var person = list.filter(function (item) { return item.id === view.getAttribute("data-view"); })[0];
-        document.getElementById("viewMemberBody").innerHTML = ["Member ID", "Name", "Email", "Phone", "Package", "PV", "Status", "Join date", "Sponsor", "Parent", "Position"].map(function (label) {
-          var key = label === "Member ID" ? "id" : label === "Join date" ? "joined" : label.toLowerCase();
-          return "<p><strong>" + label + ":</strong> " + Z.escapeHtml(person[key]) + "</p>";
+        document.getElementById("viewMemberBody").innerHTML = ["Member ID", "Name", "Email", "Phone", "Package", "Award Rank", "PV", "Status", "Join date", "Sponsor", "Parent", "Position"].map(function (label) {
+          var key = label === "Member ID" ? "id"
+            : label === "Join date" ? "joined"
+            : label === "Award Rank" ? "awardRank"
+            : label.toLowerCase();
+          return "<p><strong>" + label + ":</strong> " + Z.escapeHtml(person[key] || "—") + "</p>";
         }).join("");
         bootstrap.Modal.getOrCreateInstance(document.getElementById("viewMemberModal")).show();
       }
@@ -167,6 +172,9 @@
         form.email.value = current.email;
         form.phone.value = current.phone;
         form.package.value = current.package;
+        if (form.awardRank) {
+          form.awardRank.value = current.awardRank || "Member";
+        }
         form.status.value = current.status;
         bootstrap.Modal.getOrCreateInstance(document.getElementById("editMemberModal")).show();
       }
@@ -180,6 +188,7 @@
             email: person.email,
             phone: person.phone,
             package: person.package,
+            awardRank: person.awardRank || "Member",
             status: "Suspended"
           }).then(function (payload) {
             if (!payload.ok) {
@@ -205,6 +214,7 @@
             email: actPerson.email,
             phone: actPerson.phone,
             package: actPerson.package,
+            awardRank: actPerson.awardRank || "Member",
             status: "Active"
           }).then(function (payload) {
             if (!payload.ok) {
@@ -230,6 +240,7 @@
         email: form.email.value.trim(),
         phone: form.phone.value.trim(),
         package: form.package.value,
+        awardRank: form.awardRank ? form.awardRank.value : "Member",
         status: form.status.value
       }).then(function (payload) {
         if (!payload.ok) {
@@ -469,7 +480,7 @@
       var list = rows();
       if (view) {
         var item = list.filter(function (row) { return String(row.id) === String(view.getAttribute("data-view")); })[0];
-        document.getElementById("viewWithdrawalBody").innerHTML = "<p><strong>" + Z.escapeHtml(item.id) + "</strong></p><p>" + Z.escapeHtml(item.member) + " requested cash " + Z.formatNaira(item.amount) + " to " + Z.escapeHtml(item.bank) + " account " + Z.escapeHtml(item.account) + ".</p><p>Eagle Lands reserve: " + Z.formatNaira(item.reserved || 0) + "</p><p>Status: " + Z.escapeHtml(item.status) + "</p>";
+        document.getElementById("viewWithdrawalBody").innerHTML = "<p><strong>" + Z.escapeHtml(item.id) + "</strong></p><p>" + Z.escapeHtml(item.member) + " requested cash " + Z.formatNaira(item.amount) + " to " + Z.escapeHtml(item.bank) + " account " + Z.escapeHtml(item.account) + ".</p><p>Eagle land and Homes LTD reserve: " + Z.formatNaira(item.reserved || 0) + "</p><p>Status: " + Z.escapeHtml(item.status) + "</p>";
         bootstrap.Modal.getOrCreateInstance(document.getElementById("viewWithdrawalModal")).show();
       }
       function update(id, status) {
@@ -689,6 +700,12 @@
       form.binaryQualification.checked = !!data.binaryQualification;
     }
     form.minWithdrawal.value = data.minWithdrawal;
+    if (form.paystackPublicKey) {
+      form.paystackPublicKey.value = data.paystackPublicKey || "";
+    }
+    if (form.paystackSecretKey) {
+      form.paystackSecretKey.value = "";
+    }
     if (form.storeSalesTarget) {
       form.storeSalesTarget.value = data.storeSalesTarget || "3000000";
     }
@@ -731,6 +748,8 @@
         pairPv: form.pairPv.value,
         binaryQualification: form.binaryQualification ? form.binaryQualification.checked : true,
         minWithdrawal: form.minWithdrawal.value,
+        paystackPublicKey: form.paystackPublicKey ? form.paystackPublicKey.value.trim() : "",
+        paystackSecretKey: form.paystackSecretKey ? form.paystackSecretKey.value.trim() : "",
         storeSalesTarget: form.storeSalesTarget ? form.storeSalesTarget.value : "3000000",
         storeSalesBonus: form.storeSalesBonus ? form.storeSalesBonus.value : "0",
         emailAlerts: form.emailAlerts.checked,
@@ -1065,13 +1084,50 @@
         var member = row.memberCode
           ? Z.escapeHtml(row.memberCode) + (row.memberName ? " · " + Z.escapeHtml(row.memberName) : "")
           : Z.escapeHtml(row.email);
+        var method = Z.escapeHtml(row.method || "paystack");
+        var receipt = row.proofPath
+          ? '<a href="' + Z.escapeHtml(row.proofPath) + '" target="_blank" rel="noopener">View</a>'
+          : "—";
+        var actions = "—";
+        if (row.canReview) {
+          actions = '<button class="btn btn-soft btn-sm" type="button" data-pay-approve="' + Z.escapeHtml(row.reference) + '">Approve</button> ' +
+            '<button class="btn btn-soft btn-sm" type="button" data-pay-reject="' + Z.escapeHtml(row.reference) + '">Reject</button>';
+        }
         return "<tr><td>" + Z.escapeHtml(row.createdAt || "") + "</td><td>" + Z.escapeHtml(row.reference) +
-          "</td><td>" + member + "</td><td>" + Z.escapeHtml(row.package) +
+          "</td><td>" + method + "</td><td>" + member + "</td><td>" + Z.escapeHtml(row.package) +
           "</td><td>" + Z.formatNaira(row.amount) +
+          "</td><td>" + receipt +
           '</td><td><span class="' + Z.statusClass(row.status) + '">' + Z.escapeHtml(row.status) +
-          "</span></td></tr>";
+          "</span></td><td>" + actions + "</td></tr>";
       }).join("");
     }
+
+    body.addEventListener("click", function (event) {
+      var approve = event.target.closest("[data-pay-approve]");
+      var reject = event.target.closest("[data-pay-reject]");
+      var reference = approve
+        ? approve.getAttribute("data-pay-approve")
+        : (reject ? reject.getAttribute("data-pay-reject") : "");
+      if (!reference) {
+        return;
+      }
+      var action = approve ? "approve" : "reject";
+      var note = window.prompt(action === "approve" ? "Optional approval note" : "Optional rejection note", "") || "";
+      postJson("../api/admin-payment-review.php", {
+        reference: reference,
+        action: action,
+        note: note
+      }).then(function (payload) {
+        if (!payload.ok) {
+          Z.showToast(payload.error || "Could not update payment.", "error");
+          return;
+        }
+        Z.showToast(payload.message || "Payment updated.");
+        loadPayments();
+      }).catch(function () {
+        Z.showToast("Payment review server did not respond.", "error");
+      });
+    });
 
     function loadPayments() {
       return fetch("../api/admin-payments.php", { credentials: "same-origin" })

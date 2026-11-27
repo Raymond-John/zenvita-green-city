@@ -31,7 +31,7 @@
         <a class="sidebar-link" href="packages"><i class="bi bi-box-seam"></i> My Package</a>
         <a class="sidebar-link" href="order"><i class="bi bi-cart3"></i> Order products</a>
         <a class="sidebar-link" href="withdrawals"><i class="bi bi-bank"></i> Withdrawals</a>
-        <a class="sidebar-link" href="eagle-lands"><i class="bi bi-buildings"></i> Eagle Lands</a>
+        <a class="sidebar-link" href="eagle-lands"><i class="bi bi-buildings"></i> Eagle land and Homes LTD</a>
         <a class="sidebar-link is-active" aria-current="page" href="transactions"><i class="bi bi-receipt"></i> Transactions</a>
         <a class="sidebar-link" href="profile"><i class="bi bi-person"></i> Profile</a>
       </nav>
@@ -43,7 +43,7 @@
         <button class="icon-btn menu-toggle" id="sidebarToggle" type="button" aria-expanded="false" aria-controls="appSidebar" aria-label="Open menu"><i class="bi bi-list"></i></button>
         <div class="topbar-title"><strong>Transactions</strong><small>Account activity</small></div>
         <div class="dropdown"><button class="icon-btn" type="button" data-bs-toggle="dropdown" aria-label="Notifications"><i class="bi bi-bell"></i><span class="notify-dot" id="notifyDot"></span></button><div class="dropdown-menu dropdown-menu-end notify-menu" id="notifyMenu"></div></div>
-        <div class="dropdown"><button class="profile-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="avatar" data-user-avatar>AO</span><span class="profile-meta"><strong data-user-name>Member</strong><small>Member</small></span></button><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="profile">Profile</a></li><li><a class="dropdown-item" href="../login" data-logout>Logout</a></li></ul></div>
+        <div class="dropdown"><button class="profile-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="avatar" data-user-avatar>AO</span><span class="profile-meta"><strong data-user-name>Member</strong><small data-user-award-rank>Member</small></span></button><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="profile">Profile</a></li><li><a class="dropdown-item" href="../login" data-logout>Logout</a></li></ul></div>
       </header>
       <main class="app-content" id="main">
         <div class="page-head"><div><h1>Transactions</h1><p>Amounts with a minus sign are money leaving the account.</p></div></div>
@@ -52,7 +52,7 @@
             <label class="visually-hidden" for="txSearch">Search transactions</label>
             <input class="form-control" id="txSearch" type="search" placeholder="Search ID or description">
             <label class="visually-hidden" for="txType">Type</label>
-            <select class="form-select" id="txType"><option value="">All types</option><option>Commission</option><option>Withdrawal</option><option>Eagle Lands</option><option>Package</option></select>
+            <select class="form-select" id="txType"><option value="">All types</option><option>Commission</option><option>Withdrawal</option><option>Eagle land and Homes LTD</option><option>Package</option></select>
             <label class="visually-hidden" for="txStatus">Status</label>
             <select class="form-select" id="txStatus"><option value="">All statuses</option><option>Pending</option><option>Approved</option><option>Paid</option><option>Rejected</option></select>
           </div>

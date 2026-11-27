@@ -114,8 +114,8 @@ try {
                 ->execute([$upgradeBonus, $sponsorId]);
         }
 
-        // Pay 5-generation indirect upgrade bonus on price difference
-        $indirectRates = [2, 1, 1, 0.5, 0.5];
+        // Pay 6-generation indirect upgrade bonus on price difference
+        $indirectRates = indirect_generation_rates();
         $uplineStmt = $pdo->prepare('SELECT sponsor_id FROM users WHERE id = ?');
         $statusStmt = $pdo->prepare('SELECT status FROM users WHERE id = ?');
         $currSponsor = $sponsorId;

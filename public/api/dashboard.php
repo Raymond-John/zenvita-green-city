@@ -4,6 +4,9 @@ require __DIR__ . '/bootstrap.php';
 $user = require_user('member');
 $pdo = db();
 ensure_eagle_lands_schema($pdo);
+ensure_award_rank_schema($pdo);
+sync_award_ranks_by_generation($pdo);
+$user = current_user() ?: $user;
 
 function flatten_team(array $node, array &$list): void
 {
@@ -27,6 +30,11 @@ $available = (float) ($walletRow['available_balance'] ?? 0);
 $eagleLands = (float) ($walletRow['eagle_lands_balance'] ?? 0);
 $policy = withdrawal_policy($user);
 $withdrawable = round($available * ((float) $policy['cashPercent'] / 100), 2);
+$reservedHeld = !empty($policy['eagleLandsSplit'])
+    ? round($available * ((float) $policy['reservePercent'] / 100), 2)
+    : 0.0;
+// Reserve card = 60% held from current wallet + amounts already moved on withdrawals.
+$eagleLandsReserve = round($eagleLands + $reservedHeld, 2);
 
 $recent = $pdo->prepare(
     'SELECT earned_on, source_label, commission_type, package_name, pv, amount, status
@@ -150,12 +158,18 @@ foreach ($packageRows as $row) {
     ];
 }
 
+$freshUser = current_user() ?: $user;
+$awardRank = trim((string) ($freshUser['award_rank'] ?? '')) ?: 'Member';
+
 json_out([
     'ok' => true,
-    'user' => current_user(),
+    'user' => $freshUser,
+    'award_rank' => $awardRank,
     'available' => $available,
     'withdrawable' => $withdrawable,
+    'reservedHeld' => $reservedHeld,
     'eagleLands' => $eagleLands,
+    'eagleLandsReserve' => $eagleLandsReserve,
     'withdrawalPolicy' => $policy,
     'min_withdrawal' => (float) setting('min_withdrawal', '1000'),
     'earnings_total' => array_sum($byType),
