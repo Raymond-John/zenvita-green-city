@@ -49,7 +49,9 @@
         <div class="dropdown"><button class="profile-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="avatar" data-user-avatar>AO</span><span class="profile-meta"><strong data-user-name>Member</strong><small data-user-award-rank>Member</small></span></button><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="profile">Profile</a></li><li><a class="dropdown-item" href="../login" data-logout>Logout</a></li></ul></div>
       </header>
       <main class="app-content" id="main">
-        <div class="page-head"><div><h1>Book a product order</h1><p>Choose a product, pick an available store, and select home delivery or store pickup. The store owner is notified when you submit.</p></div></div>
+        <div class="page-head"><div><h1>Order and pay for products</h1><p>Choose a product, pick a store, and pay with Paystack. The store is notified after payment succeeds.</p></div></div>
+        <div class="alert alert-success" id="orderPaySuccess" hidden role="status"></div>
+        <div class="alert alert-danger" id="orderPayFailed" hidden role="alert"></div>
         <section class="row g-3">
           <div class="col-lg-6">
             <form class="panel" id="productOrderForm" novalidate>
@@ -66,6 +68,7 @@
               <div class="mb-3">
                 <label class="form-label" for="orderQuantity">Quantity</label>
                 <input class="form-control" id="orderQuantity" name="quantity" type="number" min="1" value="1" required>
+                <p class="text-muted small mb-0 mt-1" id="orderTotalMeta">Total: —</p>
               </div>
               <div class="mb-3">
                 <label class="form-label" for="orderStore">Store</label>
@@ -88,7 +91,7 @@
               </fieldset>
               <div class="mb-3"><label class="form-label" for="orderFullName">Full name</label><input class="form-control" id="orderFullName" name="fullName" required><p class="field-error" id="orderFullName-error"></p></div>
               <div class="mb-3"><label class="form-label" for="orderPhone">Phone</label><input class="form-control" id="orderPhone" name="phone" type="tel" required><p class="field-error" id="orderPhone-error"></p></div>
-              <div class="mb-3"><label class="form-label" for="orderEmail">Email</label><input class="form-control" id="orderEmail" name="email" type="email"></div>
+              <div class="mb-3"><label class="form-label" for="orderEmail">Email (for Paystack)</label><input class="form-control" id="orderEmail" name="email" type="email" required><p class="field-error" id="orderEmail-error"></p></div>
               <div id="homeDeliveryFields">
                 <div class="mb-3"><label class="form-label" for="orderAddress">Delivery address</label><input class="form-control" id="orderAddress" name="deliveryAddress"><p class="field-error" id="orderAddress-error"></p></div>
                 <div class="mb-3"><label class="form-label" for="orderCity">City</label><input class="form-control" id="orderCity" name="deliveryCity"><p class="field-error" id="orderCity-error"></p></div>
@@ -98,19 +101,20 @@
                 <div class="mb-3"><label class="form-label" for="orderPickup">Preferred pickup time</label><input class="form-control" id="orderPickup" name="preferredPickupAt" placeholder="e.g. Tomorrow 2pm"></div>
                 <div class="mb-3"><label class="form-label" for="orderPickupNotes">Pickup notes</label><textarea class="form-control" id="orderPickupNotes" name="deliveryNotesPickup" rows="2"></textarea></div>
               </div>
-              <button class="btn btn-brand w-100" type="submit" id="orderSubmitBtn">Submit booking</button>
+              <button class="btn btn-brand w-100" type="submit" id="orderSubmitBtn">Pay with Paystack</button>
+              <p class="text-muted small mt-2 mb-0">You will be redirected to Paystack to complete payment for this order.</p>
             </form>
           </div>
           <div class="col-lg-6">
             <section class="panel">
-              <h2>Your bookings</h2>
+              <h2>Your orders</h2>
               <div class="table-wrap">
                 <table class="data">
-                  <thead><tr><th>Date</th><th>Reference</th><th>Product</th><th>Store</th><th>Type</th><th>Status</th></tr></thead>
-                  <tbody id="memberOrderBody"><tr><td class="loading-row" colspan="6">Loading…</td></tr></tbody>
+                  <thead><tr><th>Date</th><th>Reference</th><th>Product</th><th>Store</th><th>Payment</th><th>Status</th><th></th></tr></thead>
+                  <tbody id="memberOrderBody"><tr><td class="loading-row" colspan="7">Loading…</td></tr></tbody>
                 </table>
               </div>
-              <div class="empty-state" id="memberOrderEmpty" hidden>No product bookings yet.</div>
+              <div class="empty-state" id="memberOrderEmpty" hidden>No product orders yet.</div>
             </section>
           </div>
         </section>

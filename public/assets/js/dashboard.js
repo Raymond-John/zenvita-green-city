@@ -1394,8 +1394,14 @@
       }
       historyBody.innerHTML = rows.map(function (row) {
         var productLabel = row.product || row.package || "";
-        var priceLabel = row.unitPrice ? " · " + Z.formatNaira(row.unitPrice) : "";
-        return "<tr><td>" + Z.escapeHtml(row.date) + "</td><td>" + Z.escapeHtml(row.reference) + "</td><td>" + Z.escapeHtml(productLabel) + priceLabel + "</td><td>" + Z.escapeHtml(row.store) + "</td><td>" + Z.escapeHtml(row.fulfillmentLabel) + '</td><td><span class="' + Z.statusClass(row.status) + '">' + Z.escapeHtml(row.status) + "</span></td></tr>";
+        var amount = typeof row.amount === "number" ? row.amount : (Number(row.unitPrice) || 0) * (Number(row.quantity) || 1);
+        var priceLabel = amount ? " · " + Z.formatNaira(amount) : "";
+        var payLabel = row.paymentLabel || (row.paymentStatus === "paid" ? "Paid" : "Unpaid");
+        var payClass = row.paymentStatus === "paid" ? Z.statusClass("Approved") : Z.statusClass("Pending");
+        var payBtn = row.canPay
+          ? '<button type="button" class="btn btn-brand btn-sm" data-pay-order="' + Z.escapeHtml(row.reference) + '">Pay</button>'
+          : "";
+        return "<tr><td>" + Z.escapeHtml(row.date) + "</td><td>" + Z.escapeHtml(row.reference) + "</td><td>" + Z.escapeHtml(productLabel) + priceLabel + "</td><td>" + Z.escapeHtml(row.store) + "</td><td><span class=\"" + payClass + "\">" + Z.escapeHtml(payLabel) + "</span></td><td><span class=\"" + Z.statusClass(row.status) + "\">" + Z.escapeHtml(row.status) + "</span></td><td>" + payBtn + "</td></tr>";
       }).join("");
     }
 
@@ -1411,6 +1417,22 @@
       }).join("") || "<option value=\"\">No active stores yet</option>";
       updateProductMeta();
       updateStoreMeta();
+    }
+
+    function updateOrderTotal() {
+      var totalMeta = document.getElementById("orderTotalMeta");
+      if (!totalMeta) {
+        return;
+      }
+      var product = (catalog.products || []).filter(function (item) {
+        return item.key === productSelect.value;
+      })[0];
+      var qty = Math.max(1, Number(form.quantity.value) || 1);
+      if (!product) {
+        totalMeta.textContent = "Total: —";
+        return;
+      }
+      totalMeta.textContent = "Total to pay: " + Z.formatNaira((Number(product.price) || 0) * qty);
     }
 
     function updateProductMeta() {
@@ -1432,6 +1454,7 @@
           img.hidden = true;
         }
       }
+      updateOrderTotal();
     }
 
     function updateStoreMeta() {
@@ -1462,7 +1485,56 @@
     });
     productSelect.addEventListener("change", updateProductMeta);
     storeSelect.addEventListener("change", updateStoreMeta);
+    form.quantity.addEventListener("input", updateOrderTotal);
     toggleFulfillment();
+
+    function startPaystack(url) {
+      if (!url) {
+        return;
+      }
+      Z.showToast("Redirecting to Paystack…");
+      window.location.href = url;
+    }
+
+    function resumePayment(reference, button) {
+      if (button) {
+        button.disabled = true;
+      }
+      fetch("../api/order-pay.php", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference: reference })
+      }).then(function (res) {
+        return res.json();
+      }).then(function (payload) {
+        if (button) {
+          button.disabled = false;
+        }
+        if (!payload || !payload.ok) {
+          Z.showToast((payload && payload.error) || "Could not start payment.", "error");
+          return;
+        }
+        if (payload.alreadyPaid) {
+          Z.showToast("This order is already paid.");
+          return loadOrders().then(paintHistory);
+        }
+        startPaystack(payload.authorizationUrl);
+      }).catch(function () {
+        if (button) {
+          button.disabled = false;
+        }
+        Z.showToast("The payment server did not respond.", "error");
+      });
+    }
+
+    historyBody.addEventListener("click", function (event) {
+      var btn = event.target.closest("[data-pay-order]");
+      if (!btn) {
+        return;
+      }
+      resumePayment(btn.getAttribute("data-pay-order"), btn);
+    });
 
     form.addEventListener("submit", function (event) {
       event.preventDefault();
@@ -1485,6 +1557,10 @@
         Z.setFieldError(form.phone, "Enter your phone number.");
         valid = false;
       }
+      if (!form.email.value.trim() || form.email.value.indexOf("@") === -1) {
+        Z.setFieldError(form.email, "Enter a valid email for Paystack.");
+        valid = false;
+      }
       if (mode === "home_delivery") {
         if (!form.deliveryAddress.value.trim()) {
           Z.setFieldError(form.deliveryAddress, "Enter the delivery address.");
@@ -1501,6 +1577,7 @@
       }
       var button = document.getElementById("orderSubmitBtn");
       button.disabled = true;
+      button.textContent = "Starting Paystack…";
       var notes = mode === "home_delivery"
         ? form.deliveryNotes.value.trim()
         : (document.getElementById("orderPickupNotes").value || "").trim();
@@ -1524,20 +1601,50 @@
       }).then(function (res) {
         return res.json();
       }).then(function (payload) {
-        button.disabled = false;
         if (!payload.ok) {
-          Z.showToast(payload.error || "The booking could not be saved.", "error");
+          button.disabled = false;
+          button.textContent = "Pay with Paystack";
+          Z.showToast(payload.error || "The order could not be started.", "error");
           return;
         }
-        Z.showToast("Booking " + payload.order.reference + " submitted. The store was notified.");
-        return loadOrders().then(function () {
-          paintHistory();
-        });
+        if (payload.authorizationUrl) {
+          startPaystack(payload.authorizationUrl);
+          return;
+        }
+        button.disabled = false;
+        button.textContent = "Pay with Paystack";
+        Z.showToast("Order saved, but Paystack did not return a payment link.", "error");
+        return loadOrders().then(paintHistory);
       }).catch(function () {
         button.disabled = false;
+        button.textContent = "Pay with Paystack";
         Z.showToast("The order server did not respond.", "error");
       });
     });
+
+    function showPayReturnMessage() {
+      var params = new URLSearchParams(window.location.search);
+      var pay = params.get("pay");
+      var ref = params.get("ref") || "";
+      var success = document.getElementById("orderPaySuccess");
+      var failed = document.getElementById("orderPayFailed");
+      if (!pay) {
+        return;
+      }
+      if (pay === "success" && success) {
+        success.hidden = false;
+        success.textContent = "Payment successful" + (ref ? " for " + ref : "") + ". The store has been notified.";
+        Z.showToast("Product order paid successfully.");
+      }
+      if (pay === "failed" && failed) {
+        failed.hidden = false;
+        failed.textContent = params.get("error") || ("Payment failed" + (ref ? " for " + ref : "") + ". You can retry with Pay.");
+        Z.showToast(params.get("error") || "Payment failed.", "error");
+      }
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
 
     function loadOrders() {
       return fetch("../api/orders.php", { credentials: "same-origin" }).then(function (res) {
@@ -1554,12 +1661,14 @@
         paintSelects();
         prefill();
         paintHistory();
+        updateOrderTotal();
         return data;
       });
     }
 
+    showPayReturnMessage();
     loadOrders().catch(function () {
-      historyBody.innerHTML = '<tr><td class="empty-state" colspan="6">Could not load bookings.</td></tr>';
+      historyBody.innerHTML = '<tr><td class="empty-state" colspan="7">Could not load orders.</td></tr>';
       Z.showToast("Could not load stores or products for ordering.", "error");
     });
   }

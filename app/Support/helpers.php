@@ -82,6 +82,52 @@ function ensure_package_description_column(?PDO $pdo = null): void
     $done = true;
 }
 
+/**
+ * Payment columns for member product orders (Paystack).
+ * Existing bookings (pre-payment gate) are marked paid so stores keep them.
+ */
+function ensure_order_payment_schema(?PDO $pdo = null): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $pdo = $pdo ?: db();
+    $exists = $pdo->query("SHOW TABLES LIKE 'orders'")->fetch();
+    if (!$exists) {
+        $done = true;
+        return;
+    }
+    $cols = $pdo->query('SHOW COLUMNS FROM orders')->fetchAll(PDO::FETCH_COLUMN);
+    $addedPaymentStatus = false;
+    if (!in_array('payment_status', $cols, true)) {
+        $pdo->exec(
+            "ALTER TABLE orders
+             ADD COLUMN payment_status ENUM('unpaid','pending','paid','failed') NOT NULL DEFAULT 'unpaid'
+             AFTER status"
+        );
+        $addedPaymentStatus = true;
+        $cols[] = 'payment_status';
+    }
+    if (!in_array('payment_reference', $cols, true)) {
+        $pdo->exec('ALTER TABLE orders ADD COLUMN payment_reference VARCHAR(64) NULL DEFAULT NULL AFTER payment_status');
+    }
+    if (!in_array('paystack_reference', $cols, true)) {
+        $pdo->exec('ALTER TABLE orders ADD COLUMN paystack_reference VARCHAR(64) NULL DEFAULT NULL AFTER payment_reference');
+    }
+    if (!in_array('paid_amount', $cols, true)) {
+        $pdo->exec('ALTER TABLE orders ADD COLUMN paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER paystack_reference');
+    }
+    if (!in_array('paid_at', $cols, true)) {
+        $pdo->exec('ALTER TABLE orders ADD COLUMN paid_at DATETIME NULL DEFAULT NULL AFTER paid_amount');
+    }
+    if ($addedPaymentStatus) {
+        // Legacy orders placed before Paystack gate stay visible to stores.
+        $pdo->exec("UPDATE orders SET payment_status = 'paid' WHERE payment_status = 'unpaid' AND created_at < NOW()");
+    }
+    $done = true;
+}
+
 function ensure_product_landing_columns(?PDO $pdo = null): void
 {
     static $done = false;
@@ -789,10 +835,11 @@ function store_sales_bonus_config(?PDO $pdo = null): array
 function store_completed_sales_total(int $storeId, ?PDO $pdo = null): float
 {
     $pdo = $pdo ?: db();
+    ensure_order_payment_schema($pdo);
     $stmt = $pdo->prepare(
         "SELECT COALESCE(SUM(quantity * unit_price), 0)
          FROM orders
-         WHERE store_id = ? AND status = 'Completed'"
+         WHERE store_id = ? AND status = 'Completed' AND payment_status = 'paid'"
     );
     $stmt->execute([$storeId]);
     return round((float) $stmt->fetchColumn(), 2);

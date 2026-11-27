@@ -3,6 +3,7 @@ require __DIR__ . '/bootstrap.php';
 
 $user = require_user('member');
 $pdo = db();
+ensure_order_payment_schema($pdo);
 
 $stores = $pdo->query(
     "SELECT s.id, s.name, s.address, s.city, s.phone, u.member_code AS store_code
@@ -23,7 +24,7 @@ $products = $pdo->query(
 $stmt = $pdo->prepare(
     'SELECT o.reference, o.quantity, o.unit_price, o.fulfillment, o.full_name, o.phone, o.email,
             o.delivery_address, o.delivery_city, o.delivery_notes, o.preferred_pickup_at,
-            o.status, o.created_at, p.name AS product_name, s.name AS store_name
+            o.status, o.payment_status, o.paid_amount, o.created_at, p.name AS product_name, s.name AS store_name
      FROM orders o
      JOIN products p ON p.id = o.product_id
      JOIN stores s ON s.id = o.store_id
@@ -34,16 +35,23 @@ $stmt = $pdo->prepare(
 $stmt->execute([(int) $user['id']]);
 $orders = [];
 foreach ($stmt as $row) {
+    $qty = (int) $row['quantity'];
+    $unit = (float) $row['unit_price'];
+    $paymentStatus = (string) ($row['payment_status'] ?? 'unpaid');
     $orders[] = [
         'reference' => $row['reference'],
         'product' => $row['product_name'],
         'package' => $row['product_name'], // backward-compatible label for older UI
-        'quantity' => (int) $row['quantity'],
-        'unitPrice' => (float) $row['unit_price'],
+        'quantity' => $qty,
+        'unitPrice' => $unit,
+        'amount' => round($unit * $qty, 2),
         'fulfillment' => $row['fulfillment'],
         'fulfillmentLabel' => $row['fulfillment'] === 'home_delivery' ? 'Home delivery' : 'Pickup',
         'store' => $row['store_name'],
         'status' => $row['status'],
+        'paymentStatus' => $paymentStatus,
+        'paymentLabel' => $paymentStatus === 'paid' ? 'Paid' : ($paymentStatus === 'pending' ? 'Awaiting payment' : ucfirst($paymentStatus)),
+        'canPay' => !in_array($paymentStatus, ['paid'], true),
         'date' => date('d M Y H:i', strtotime($row['created_at'])),
         'deliveryAddress' => $row['delivery_address'],
         'deliveryCity' => $row['delivery_city'],

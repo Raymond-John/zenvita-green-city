@@ -61,8 +61,8 @@
           </div>
           <div class="table-wrap">
             <table class="data">
-              <thead><tr><th>Date</th><th>Reference</th><th>Member</th><th>Product</th><th>Qty</th><th>Fulfillment</th><th>Store</th><th>Status</th></tr></thead>
-              <tbody id="adminOrderBody"><tr><td class="loading-row" colspan="8">Loading orders…</td></tr></tbody>
+              <thead><tr><th>Date</th><th>Reference</th><th>Member</th><th>Product</th><th>Qty</th><th>Fulfillment</th><th>Store</th><th>Payment</th><th>Status</th></tr></thead>
+              <tbody id="adminOrderBody"><tr><td class="loading-row" colspan="9">Loading orders…</td></tr></tbody>
             </table>
           </div>
           <div class="empty-state" id="adminOrderEmpty" hidden>No orders match this filter.</div>

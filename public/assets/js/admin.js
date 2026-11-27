@@ -1372,7 +1372,9 @@
         return;
       }
       body.innerHTML = rows.map(function (row) {
-        return "<tr><td>" + Z.escapeHtml(row.date) + "</td><td>" + Z.escapeHtml(row.reference) + "</td><td>" + Z.escapeHtml(row.member) + "</td><td>" + Z.escapeHtml(row.package) + "</td><td>" + row.quantity + "</td><td>" + Z.escapeHtml(row.fulfillmentLabel) + "</td><td>" + Z.escapeHtml(row.store) + '</td><td><span class="' + Z.statusClass(row.status) + '">' + Z.escapeHtml(row.status) + "</span></td></tr>";
+        var payLabel = row.paymentLabel || (row.paymentStatus === "paid" ? "Paid" : "Unpaid");
+        var payClass = row.paymentStatus === "paid" ? Z.statusClass("Approved") : Z.statusClass("Pending");
+        return "<tr><td>" + Z.escapeHtml(row.date) + "</td><td>" + Z.escapeHtml(row.reference) + "</td><td>" + Z.escapeHtml(row.member) + "</td><td>" + Z.escapeHtml(row.package) + "</td><td>" + row.quantity + "</td><td>" + Z.escapeHtml(row.fulfillmentLabel) + "</td><td>" + Z.escapeHtml(row.store) + '</td><td><span class="' + payClass + '">' + Z.escapeHtml(payLabel) + '</span></td><td><span class="' + Z.statusClass(row.status) + '">' + Z.escapeHtml(row.status) + "</span></td></tr>";
       }).join("");
     }
     search.addEventListener("input", paint);

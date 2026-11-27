@@ -17,15 +17,17 @@ $storeId = (int) $store['id'];
 maybe_award_store_sales_bonuses($storeId, $pdo);
 $salesBonus = store_sales_bonus_summary($storeId, (int) $user['id'], $pdo);
 
+ensure_order_payment_schema($pdo);
 $ordersStmt = $pdo->prepare(
     'SELECT o.id, o.reference, o.quantity, o.unit_price, o.fulfillment, o.full_name, o.phone, o.email,
             o.delivery_address, o.delivery_city, o.delivery_notes, o.preferred_pickup_at,
-            o.status, o.created_at, p.name AS product_name,
+            o.status, o.payment_status, o.created_at, p.name AS product_name,
             u.member_code, u.username
      FROM orders o
      JOIN products p ON p.id = o.product_id
      JOIN users u ON u.id = o.member_id
      WHERE o.store_id = ?
+       AND o.payment_status = \'paid\'
      ORDER BY o.created_at DESC, o.id DESC
      LIMIT 100'
 );

@@ -3,6 +3,7 @@ require __DIR__ . '/bootstrap.php';
 
 require_user('admin');
 $pdo = db();
+ensure_order_payment_schema($pdo);
 
 $stores = $pdo->query(
     'SELECT s.id, s.name, s.address, s.city, s.phone, s.status, s.created_at,
@@ -31,7 +32,8 @@ foreach ($stores as $row) {
 }
 
 $orders = $pdo->query(
-    'SELECT o.id, o.reference, o.quantity, o.unit_price, o.fulfillment, o.full_name, o.phone, o.status, o.created_at,
+    'SELECT o.id, o.reference, o.quantity, o.unit_price, o.fulfillment, o.full_name, o.phone, o.status,
+            o.payment_status, o.paid_amount, o.created_at,
             p.name AS product_name, s.name AS store_name, u.member_code
      FROM orders o
      JOIN products p ON p.id = o.product_id
@@ -43,6 +45,7 @@ $orders = $pdo->query(
 
 $orderList = [];
 foreach ($orders as $row) {
+    $paymentStatus = (string) ($row['payment_status'] ?? 'unpaid');
     $orderList[] = [
         'id' => (int) $row['id'],
         'reference' => $row['reference'],
@@ -52,10 +55,13 @@ foreach ($orders as $row) {
         'package' => $row['product_name'],
         'quantity' => (int) $row['quantity'],
         'unitPrice' => (float) $row['unit_price'],
+        'amount' => round(((float) $row['unit_price']) * (int) $row['quantity'], 2),
         'fulfillmentLabel' => $row['fulfillment'] === 'home_delivery' ? 'Home delivery' : 'Pickup',
         'store' => $row['store_name'],
         'phone' => $row['phone'],
         'status' => $row['status'],
+        'paymentStatus' => $paymentStatus,
+        'paymentLabel' => $paymentStatus === 'paid' ? 'Paid' : ($paymentStatus === 'pending' ? 'Awaiting payment' : ucfirst($paymentStatus)),
         'date' => date('d M Y H:i', strtotime($row['created_at'])),
     ];
 }
