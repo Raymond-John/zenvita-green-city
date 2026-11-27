@@ -10,29 +10,46 @@ if ($reference === '') {
 }
 
 $pdo = db();
-$stmt = $pdo->prepare('SELECT * FROM registration_payments WHERE reference = ? LIMIT 1');
-$stmt->execute([$reference]);
-$payment = $stmt->fetch();
-if (!$payment) {
-    json_out(['ok' => false, 'error' => 'Payment not found.'], 404);
-}
+$pdo->beginTransaction();
+try {
+    $stmt = $pdo->prepare('SELECT * FROM registration_payments WHERE reference = ? LIMIT 1 FOR UPDATE');
+    $stmt->execute([$reference]);
+    $payment = $stmt->fetch();
+    if (!$payment) {
+        $pdo->rollBack();
+        json_out(['ok' => false, 'error' => 'Payment not found.'], 404);
+    }
 
-if ($payment['status'] === 'pending') {
-    $verified = verify_paystack_reference($reference);
-    if (!empty($verified['ok'])) {
-        $data = $verified['data'];
-        $paidAmount = round(((float) ($data['amount'] ?? 0)) / 100, 2);
-        $expected = round((float) $payment['amount'], 2);
-        if ($paidAmount + 0.01 >= $expected) {
-            $pdo->prepare(
+    if ($payment['status'] === 'pending' && ($payment['payment_method'] ?? 'paystack') === 'paystack') {
+        $verified = verify_paystack_reference($reference, [
+            'reference' => $reference,
+            'amount_kobo' => naira_to_kobo($payment['amount']),
+            'currency' => 'NGN',
+            'purpose' => 'registration',
+        ]);
+        if (!empty($verified['ok'])) {
+            $upd = $pdo->prepare(
                 "UPDATE registration_payments
                  SET status = 'paid', paystack_reference = ?, updated_at = NOW()
                  WHERE reference = ? AND status = 'pending'"
-            )->execute([(string) ($data['reference'] ?? $reference), $reference]);
-            $payment['status'] = 'paid';
-            $payment['paystack_reference'] = (string) ($data['reference'] ?? $reference);
+            );
+            $upd->execute([(string) ($verified['reference'] ?? $reference), $reference]);
+            if ($upd->rowCount() === 1) {
+                $payment['status'] = 'paid';
+                $payment['paystack_reference'] = (string) ($verified['reference'] ?? $reference);
+            } else {
+                // Another request may have claimed it; reload.
+                $stmt->execute([$reference]);
+                $payment = $stmt->fetch() ?: $payment;
+            }
         }
     }
+    $pdo->commit();
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    json_out(['ok' => false, 'error' => 'Could not verify payment status.'], 500);
 }
 
 if (!in_array($payment['status'], ['paid', 'registered', 'funded'], true)) {
@@ -44,6 +61,14 @@ if ($payment['status'] === 'registered' || $payment['status'] === 'funded') {
 }
 
 $_SESSION['reg_payment_ref'] = $reference;
+$sponsor = trim((string) ($payment['sponsor_code'] ?? ''));
+$side = strtolower(trim((string) ($payment['placement_side'] ?? '')));
+if ($sponsor !== '') {
+    $_SESSION['reg_sponsor'] = $sponsor;
+}
+if (in_array($side, ['left', 'right'], true)) {
+    $_SESSION['reg_side'] = $side;
+}
 
 json_out([
     'ok' => true,
@@ -52,4 +77,6 @@ json_out([
     'email' => $payment['email'],
     'amount' => (float) $payment['amount'],
     'package' => $payment['package_name'],
+    'sponsor' => $sponsor,
+    'side' => in_array($side, ['left', 'right'], true) ? $side : '',
 ]);

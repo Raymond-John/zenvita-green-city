@@ -17,8 +17,23 @@ $packageName = trim((string) ($body['package'] ?? 'Vision'));
 $side = strtolower(trim((string) ($body['side'] ?? '')));
 $sponsorName = trim((string) ($body['sponsor'] ?? ''));
 $paymentReference = trim((string) ($body['paymentReference'] ?? ''));
-// Public self-registration must pay first. Portal admin / logged-in member downline signup can bypass.
-$requiresPayment = !$actor;
+
+/*
+ * Authorization:
+ * - Public / store callers always require an approved payment.
+ * - Authenticated members may create downlines under themselves without payment
+ *   (existing member-registration workflow). Being logged in alone is not enough
+ *   for store or other roles.
+ * - Admin portal create may bypass payment (authorized administrative workflow).
+ */
+$actorRole = $actor ? (string) ($actor['role'] ?? '') : '';
+$isAdminBypass = $actorRole === 'admin';
+$isMemberDownlineBypass = $actorRole === 'member';
+$requiresPayment = !($isAdminBypass || $isMemberDownlineBypass);
+
+if ($actorRole === 'store') {
+    json_out(['ok' => false, 'error' => 'Store accounts cannot register members directly. Use a referral link so the new member pays first.'], 403);
+}
 
 if (!preg_match('/^[A-Za-z0-9._-]{3,60}$/', $username)) {
     json_out(['ok' => false, 'error' => 'Use a username of at least 3 letters or numbers.'], 422);
@@ -39,6 +54,7 @@ if (strlen(preg_replace('/\D+/', '', $phone)) < 10 || strlen($phone) > 30) {
 $pdo = db();
 ensure_registration_payments_table($pdo);
 ensure_award_rank_schema($pdo);
+
 $package = $pdo->prepare('SELECT id, name, price, pv, direct_bonus FROM packages WHERE name = ? OR code = ? LIMIT 1');
 $package->execute([$packageName, strtolower($packageName)]);
 $packageRow = $package->fetch();
@@ -46,35 +62,17 @@ if (!$packageRow) {
     json_out(['ok' => false, 'error' => 'Choose a package.'], 422);
 }
 
-$paymentRow = null;
+$paymentReferenceToUse = $paymentReference;
 if ($requiresPayment) {
     start_session();
-    if ($paymentReference === '') {
-        $paymentReference = trim((string) ($_SESSION['reg_payment_ref'] ?? ''));
+    if ($paymentReferenceToUse === '') {
+        $paymentReferenceToUse = trim((string) ($_SESSION['reg_payment_ref'] ?? ''));
     }
-    if ($paymentReference === '') {
+    if ($paymentReferenceToUse === '') {
         json_out([
             'ok' => false,
             'error' => 'Complete package payment with Paystack or get an admin-approved receipt before registering.',
         ], 422);
-    }
-    $payStmt = $pdo->prepare('SELECT * FROM registration_payments WHERE reference = ? LIMIT 1');
-    $payStmt->execute([$paymentReference]);
-    $paymentRow = $payStmt->fetch();
-    if (!$paymentRow || $paymentRow['status'] !== 'paid') {
-        json_out([
-            'ok' => false,
-            'error' => 'Payment is not approved yet. Finish Paystack checkout or wait for admin receipt approval.',
-        ], 422);
-    }
-    if (strcasecmp((string) $paymentRow['email'], $email) !== 0) {
-        json_out(['ok' => false, 'error' => 'Register with the same email used for payment.'], 422);
-    }
-    if (
-        strcasecmp((string) $paymentRow['package_name'], $packageRow['name']) !== 0
-        && (int) $paymentRow['package_id'] !== (int) $packageRow['id']
-    ) {
-        json_out(['ok' => false, 'error' => 'Register with the same package you paid for.'], 422);
     }
 }
 
@@ -92,80 +90,122 @@ if ($emailTaken->fetch()) {
 $sponsorId = null;
 $parentId = null;
 $binarySide = null;
+$code = '';
 
-if ($actor && $actor['role'] === 'member') {
-    if (!in_array($side, ['left', 'right'], true)) {
-        json_out(['ok' => false, 'error' => 'Choose the left or right side.'], 422);
+$pdo->beginTransaction();
+try {
+    $paymentRow = null;
+    if ($requiresPayment) {
+        $payStmt = $pdo->prepare('SELECT * FROM registration_payments WHERE reference = ? LIMIT 1 FOR UPDATE');
+        $payStmt->execute([$paymentReferenceToUse]);
+        $paymentRow = $payStmt->fetch();
+        if (!$paymentRow) {
+            throw new RuntimeException('PAYMENT_MISSING');
+        }
+        if (($paymentRow['status'] ?? '') !== 'paid') {
+            throw new RuntimeException('PAYMENT_NOT_PAID');
+        }
+        if (strcasecmp((string) $paymentRow['email'], $email) !== 0) {
+            throw new RuntimeException('PAYMENT_EMAIL_MISMATCH');
+        }
+        // Package and amount must match the payment record / DB package price.
+        $paidPackageOk = (
+            (int) $paymentRow['package_id'] === (int) $packageRow['id']
+            || strcasecmp((string) $paymentRow['package_name'], (string) $packageRow['name']) === 0
+        );
+        if (!$paidPackageOk) {
+            throw new RuntimeException('PAYMENT_PACKAGE_MISMATCH');
+        }
+        if (naira_to_kobo($paymentRow['amount']) !== naira_to_kobo($packageRow['price'])) {
+            throw new RuntimeException('PAYMENT_AMOUNT_MISMATCH');
+        }
+
+        // Prefer payment-bound sponsor/side over freshly submitted browser values.
+        $boundSponsor = trim((string) ($paymentRow['sponsor_code'] ?? ''));
+        $boundSide = strtolower(trim((string) ($paymentRow['placement_side'] ?? '')));
+        if ($boundSponsor !== '') {
+            $sponsorName = $boundSponsor;
+        }
+        if (in_array($boundSide, ['left', 'right'], true)) {
+            $side = $boundSide;
+        }
     }
-    $sponsorId = (int) $actor['id'];
-    $placed = open_seat($pdo, $sponsorId, $side);
-    $parentId = $placed['parent_id'];
-    $binarySide = $placed['side'];
-} elseif ($actor && $actor['role'] === 'admin') {
-    $root = $pdo->query("SELECT id FROM users WHERE role = 'member' AND parent_id IS NULL LIMIT 1")->fetch();
-    if ($sponsorName === '') {
-        if ($root) {
-            json_out(['ok' => false, 'error' => 'Enter the sponsor username. The first member is already stored.'], 422);
+
+    if ($isMemberDownlineBypass) {
+        if (!in_array($side, ['left', 'right'], true)) {
+            throw new RuntimeException('SIDE_REQUIRED');
+        }
+        $sponsorId = (int) $actor['id'];
+        $placed = open_seat($pdo, $sponsorId, $side);
+        $parentId = $placed['parent_id'];
+        $binarySide = $placed['side'];
+    } elseif ($isAdminBypass) {
+        $root = $pdo->query("SELECT id FROM users WHERE role = 'member' AND parent_id IS NULL LIMIT 1")->fetch();
+        if ($sponsorName === '') {
+            if ($root) {
+                throw new RuntimeException('SPONSOR_REQUIRED_ROOT_EXISTS');
+            }
+        } else {
+            if (!in_array($side, ['left', 'right'], true)) {
+                throw new RuntimeException('SIDE_REQUIRED');
+            }
+            $sponsor = $pdo->prepare("SELECT id, status FROM users WHERE (username = ? OR member_code = ?) AND role = 'member' LIMIT 1");
+            $sponsor->execute([$sponsorName, $sponsorName]);
+            $sponsorRow = $sponsor->fetch();
+            if (!$sponsorRow) {
+                throw new RuntimeException('SPONSOR_NOT_FOUND');
+            }
+            if ($sponsorRow['status'] !== 'active') {
+                throw new RuntimeException('SPONSOR_INACTIVE');
+            }
+            $sponsorId = (int) $sponsorRow['id'];
+            $placed = open_seat($pdo, $sponsorId, $side);
+            $parentId = $placed['parent_id'];
+            $binarySide = $placed['side'];
         }
     } else {
+        // Public / payment-gated registration.
+        if ($sponsorName === '') {
+            throw new RuntimeException('SPONSOR_REQUIRED');
+        }
         if (!in_array($side, ['left', 'right'], true)) {
-            json_out(['ok' => false, 'error' => 'Choose the left or right side.'], 422);
+            throw new RuntimeException('SIDE_REQUIRED');
         }
-        $sponsor = $pdo->prepare("SELECT id FROM users WHERE (username = ? OR member_code = ?) AND role = 'member' LIMIT 1");
+        $sponsor = $pdo->prepare("SELECT id, status FROM users WHERE (username = ? OR member_code = ?) AND role = 'member' LIMIT 1");
         $sponsor->execute([$sponsorName, $sponsorName]);
-        $sponsorId = (int) $sponsor->fetchColumn();
-        if (!$sponsorId) {
-            json_out(['ok' => false, 'error' => 'That sponsor username or ID was not found.'], 422);
+        $sponsorRow = $sponsor->fetch();
+        if (!$sponsorRow) {
+            throw new RuntimeException('SPONSOR_NOT_FOUND');
         }
+        if ($sponsorRow['status'] !== 'active') {
+            throw new RuntimeException('SPONSOR_INACTIVE');
+        }
+        $sponsorId = (int) $sponsorRow['id'];
         $placed = open_seat($pdo, $sponsorId, $side);
         $parentId = $placed['parent_id'];
         $binarySide = $placed['side'];
     }
-} else {
-    // Public registration via referral link
-    if ($sponsorName === '') {
-        json_out(['ok' => false, 'error' => 'A sponsor referral code or username is required.'], 422);
-    }
-    if (!in_array($side, ['left', 'right'], true)) {
-        json_out(['ok' => false, 'error' => 'Choose the left or right team placement.'], 422);
-    }
-    $sponsor = $pdo->prepare("SELECT id, status FROM users WHERE (username = ? OR member_code = ?) AND role = 'member' LIMIT 1");
-    $sponsor->execute([$sponsorName, $sponsorName]);
-    $sponsorRow = $sponsor->fetch();
-    if (!$sponsorRow) {
-        json_out(['ok' => false, 'error' => 'That sponsor code or username was not found.'], 422);
-    }
-    if ($sponsorRow['status'] !== 'active') {
-        json_out(['ok' => false, 'error' => 'That sponsor account is currently inactive.'], 422);
-    }
-    $sponsorId = (int) $sponsorRow['id'];
-    $placed = open_seat($pdo, $sponsorId, $side);
-    $parentId = $placed['parent_id'];
-    $binarySide = $placed['side'];
-}
 
-// Award rank follows binary generation from root (first) to the deepest end.
-$generation = 0;
-if ($parentId) {
-    $genStmt = $pdo->prepare('SELECT parent_id FROM users WHERE id = ?');
-    $walk = (int) $parentId;
-    $guard = 0;
-    $generation = 1;
-    while ($walk > 0 && $guard < 50) {
-        $genStmt->execute([$walk]);
-        $nextParent = $genStmt->fetchColumn();
-        if ($nextParent === false || $nextParent === null || (int) $nextParent < 1) {
-            break;
+    // Award rank follows binary generation from root (first) to the deepest end.
+    $generation = 0;
+    if ($parentId) {
+        $genStmt = $pdo->prepare('SELECT parent_id FROM users WHERE id = ?');
+        $walk = (int) $parentId;
+        $guard = 0;
+        $generation = 1;
+        while ($walk > 0 && $guard < 50) {
+            $genStmt->execute([$walk]);
+            $nextParent = $genStmt->fetchColumn();
+            if ($nextParent === false || $nextParent === null || (int) $nextParent < 1) {
+                break;
+            }
+            $generation++;
+            $walk = (int) $nextParent;
+            $guard++;
         }
-        $generation++;
-        $walk = (int) $nextParent;
-        $guard++;
     }
-}
-$awardRank = award_rank_for_generation($generation);
+    $awardRank = award_rank_for_generation($generation);
 
-$pdo->beginTransaction();
-try {
     $pdo->prepare(
         'INSERT INTO users (member_code, username, email, phone, password_hash, first_name, last_name, role, package_id, award_rank, sponsor_id, parent_id, binary_side, status, personal_pv, country)
          VALUES (NULL, ?, ?, ?, ?, ?, ?, \'member\', ?, ?, ?, ?, ?, \'active\', ?, \'Nigeria\')'
@@ -189,11 +229,15 @@ try {
     $pdo->prepare('INSERT INTO wallets (user_id, available_balance) VALUES (?, 0)')->execute([$userId]);
 
     if ($paymentRow) {
-        $pdo->prepare(
+        $consume = $pdo->prepare(
             "UPDATE registration_payments
              SET status = 'registered', user_id = ?, updated_at = NOW()
              WHERE reference = ? AND status = 'paid'"
-        )->execute([$userId, $paymentRow['reference']]);
+        );
+        $consume->execute([$userId, $paymentRow['reference']]);
+        if ($consume->rowCount() !== 1) {
+            throw new RuntimeException('PAYMENT_CONSUME_FAILED');
+        }
         unset($_SESSION['reg_payment_ref']);
     }
 
@@ -206,7 +250,7 @@ try {
             'INSERT INTO commissions (user_id, source_label, commission_type, package_name, pv, amount, status, earned_on)
              VALUES (?, ?, \'Direct Referral\', ?, ?, ?, \'Approved\', CURDATE())'
         )->execute([$sponsorId, $label, $packageRow['name'], (int) $packageRow['pv'], $bonus]);
-        $reference = 'TX-' . date('ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(2)), 0, 4));
+        $reference = 'TX-' . date('ymd') . '-' . strtoupper(bin2hex(random_bytes(4)));
         $pdo->prepare(
             'INSERT INTO transactions (user_id, reference, tx_type, description, amount, status, tx_date)
              VALUES (?, ?, \'Commission\', ?, ?, \'Approved\', CURDATE())'
@@ -227,6 +271,27 @@ try {
 } catch (Throwable $error) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
+    }
+    $map = [
+        'PAYMENT_MISSING' => ['Payment record not found.', 422],
+        'PAYMENT_NOT_PAID' => ['Payment is not approved yet. Finish Paystack checkout or wait for admin receipt approval.', 422],
+        'PAYMENT_EMAIL_MISMATCH' => ['Register with the same email used for payment.', 422],
+        'PAYMENT_PACKAGE_MISMATCH' => ['Register with the same package you paid for.', 422],
+        'PAYMENT_AMOUNT_MISMATCH' => ['Payment amount does not match the selected package price.', 422],
+        'PAYMENT_CONSUME_FAILED' => ['This payment was already used or could not be claimed.', 409],
+        'SIDE_REQUIRED' => ['Choose the left or right team placement.', 422],
+        'SPONSOR_REQUIRED' => ['A sponsor referral code or username is required.', 422],
+        'SPONSOR_REQUIRED_ROOT_EXISTS' => ['Enter the sponsor username. The first member is already stored.', 422],
+        'SPONSOR_NOT_FOUND' => ['That sponsor code or username was not found.', 422],
+        'SPONSOR_INACTIVE' => ['That sponsor account is currently inactive.', 422],
+    ];
+    $key = $error->getMessage();
+    if (isset($map[$key])) {
+        json_out(['ok' => false, 'error' => $map[$key][0]], $map[$key][1]);
+    }
+    // open_seat already emits JSON on failure; other errors stay generic.
+    if ($error instanceof RuntimeException && str_contains($error->getMessage(), 'open seat')) {
+        json_out(['ok' => false, 'error' => $error->getMessage()], 422);
     }
     json_out(['ok' => false, 'error' => 'The account could not be created.'], 500);
 }
@@ -252,7 +317,7 @@ function open_seat(PDO $pdo, int $startId, string $side): array
         $current = (int) $child;
         $guard++;
     }
-    json_out(['ok' => false, 'error' => 'That side has no open seat.'], 422);
+    throw new RuntimeException('That side has no open seat.');
 }
 
 function pay_indirect(PDO $pdo, int $newUserId, string $newName, int $sponsorId, array $packageRow): void
@@ -276,7 +341,7 @@ function pay_indirect(PDO $pdo, int $newUserId, string $newName, int $sponsorId,
                 'INSERT INTO commissions (user_id, source_label, commission_type, package_name, pv, amount, status, earned_on)
                  VALUES (?, ?, \'Indirect Referral\', ?, ?, ?, \'Approved\', CURDATE())'
             )->execute([$ancestorId, $newName, $packageRow['name'], (int) $packageRow['pv'], $amount]);
-            $reference = sprintf('ZGV-I%d-%05d-%05d', $index + 1, $newUserId, $ancestorId);
+            $reference = sprintf('ZGV-I%d-%05d-%s', $index + 1, $newUserId, strtoupper(bin2hex(random_bytes(3))));
             $pdo->prepare(
                 'INSERT INTO transactions (user_id, reference, tx_type, description, amount, status, tx_date)
                  VALUES (?, ?, \'Commission\', ?, ?, \'Approved\', CURDATE())'

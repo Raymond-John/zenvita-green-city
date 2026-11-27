@@ -23,6 +23,9 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 120) {
 if ($packageName === '') {
     json_out(['ok' => false, 'error' => 'Choose a package.'], 422);
 }
+if ($sponsorHint === '') {
+    json_out(['ok' => false, 'error' => 'Enter your sponsor referral code or username.'], 422);
+}
 if (paystack_secret_key() === '' || paystack_public_key() === '') {
     json_out(['ok' => false, 'error' => 'Paystack keys are not configured. Ask an admin to add them in Settings → Payment.'], 503);
 }
@@ -34,6 +37,16 @@ if ($emailTaken->fetch()) {
     json_out(['ok' => false, 'error' => 'That email already has an account. Sign in instead.'], 422);
 }
 
+$sponsor = $pdo->prepare("SELECT id, status FROM users WHERE (username = ? OR member_code = ?) AND role = 'member' LIMIT 1");
+$sponsor->execute([$sponsorHint, $sponsorHint]);
+$sponsorRow = $sponsor->fetch();
+if (!$sponsorRow) {
+    json_out(['ok' => false, 'error' => 'That sponsor code or username was not found.'], 422);
+}
+if ($sponsorRow['status'] !== 'active') {
+    json_out(['ok' => false, 'error' => 'That sponsor account is currently inactive.'], 422);
+}
+
 $package = $pdo->prepare('SELECT id, name, price FROM packages WHERE name = ? OR code = ? LIMIT 1');
 $package->execute([$packageName, strtolower($packageName)]);
 $packageRow = $package->fetch();
@@ -42,23 +55,26 @@ if (!$packageRow) {
 }
 
 $amount = round((float) $packageRow['price'], 2);
-if ($amount < 100) {
+$amountKobo = naira_to_kobo($amount);
+if ($amountKobo < 10000) {
     json_out(['ok' => false, 'error' => 'Package amount is too low for Paystack.'], 422);
 }
 
-$reference = 'ZGV-REG-' . date('ymdHis') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+$reference = 'ZGV-REG-' . date('ymdHis') . '-' . strtoupper(bin2hex(random_bytes(6)));
 $callback = app_root_url() . '/api/paystack-callback';
 
 $pdo->prepare(
     'INSERT INTO registration_payments
-        (reference, email, amount, package_id, package_name, payment_method, status)
-     VALUES (?, ?, ?, ?, ?, \'paystack\', \'pending\')'
+        (reference, email, amount, package_id, package_name, sponsor_code, placement_side, payment_method, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, \'paystack\', \'pending\')'
 )->execute([
     $reference,
     $email,
     $amount,
     (int) $packageRow['id'],
     $packageRow['name'],
+    $sponsorHint,
+    $sideHint,
 ]);
 
 $_SESSION['reg_sponsor'] = $sponsorHint;
@@ -66,7 +82,7 @@ $_SESSION['reg_side'] = $sideHint;
 
 $init = paystack_request('POST', '/transaction/initialize', [
     'email' => $email,
-    'amount' => (int) round($amount * 100),
+    'amount' => $amountKobo,
     'currency' => 'NGN',
     'reference' => $reference,
     'callback_url' => $callback,
@@ -80,7 +96,6 @@ $init = paystack_request('POST', '/transaction/initialize', [
 ]);
 
 if (empty($init['ok']) || empty($init['data']['authorization_url'])) {
-    $pdo->prepare("UPDATE registration_payments SET status = 'pending' WHERE reference = ?")->execute([$reference]);
     json_out([
         'ok' => false,
         'error' => (string) ($init['message'] ?? $init['error'] ?? 'Could not start Paystack payment.'),

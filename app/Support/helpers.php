@@ -125,6 +125,40 @@ function ensure_order_payment_schema(?PDO $pdo = null): void
         // Legacy orders placed before Paystack gate stay visible to stores.
         $pdo->exec("UPDATE orders SET payment_status = 'paid' WHERE payment_status = 'unpaid' AND created_at < NOW()");
     }
+
+    // Unique payment refs (NULLs allowed multiple times in MySQL unique indexes).
+    $indexes = $pdo->query('SHOW INDEX FROM orders')->fetchAll(PDO::FETCH_ASSOC);
+    $indexNames = [];
+    foreach ($indexes as $idx) {
+        $indexNames[(string) $idx['Key_name']] = true;
+    }
+    if (empty($indexNames['uq_orders_payment_reference'])) {
+        $pdo->exec('ALTER TABLE orders ADD UNIQUE KEY uq_orders_payment_reference (payment_reference)');
+    }
+    if (empty($indexNames['uq_orders_paystack_reference'])) {
+        $pdo->exec('ALTER TABLE orders ADD UNIQUE KEY uq_orders_paystack_reference (paystack_reference)');
+    }
+
+    $notifExists = $pdo->query("SHOW TABLES LIKE 'order_notifications'")->fetch();
+    if ($notifExists) {
+        $nIndexes = $pdo->query('SHOW INDEX FROM order_notifications')->fetchAll(PDO::FETCH_ASSOC);
+        $nNames = [];
+        foreach ($nIndexes as $idx) {
+            $nNames[(string) $idx['Key_name']] = true;
+        }
+        if (empty($nNames['uq_order_notifications_order'])) {
+            // Safe when no duplicate order_id rows exist (pre-checked in Phase 1 audit).
+            $dup = (int) $pdo->query(
+                'SELECT COUNT(*) FROM (
+                    SELECT order_id FROM order_notifications GROUP BY order_id HAVING COUNT(*) > 1
+                 ) d'
+            )->fetchColumn();
+            if ($dup === 0) {
+                $pdo->exec('ALTER TABLE order_notifications ADD UNIQUE KEY uq_order_notifications_order (order_id)');
+            }
+        }
+    }
+
     $done = true;
 }
 
@@ -362,6 +396,14 @@ function ensure_registration_payments_table(?PDO $pdo = null): void
     if (!in_array('reviewed_at', $cols, true)) {
         $add('ALTER TABLE registration_payments ADD COLUMN reviewed_at DATETIME NULL AFTER reviewed_by');
     }
+    // Re-fetch after possible ALTERs above.
+    $cols = $pdo->query('SHOW COLUMNS FROM registration_payments')->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('sponsor_code', $cols, true)) {
+        $add("ALTER TABLE registration_payments ADD COLUMN sponsor_code VARCHAR(80) NOT NULL DEFAULT '' AFTER package_name");
+    }
+    if (!in_array('placement_side', $cols, true)) {
+        $add("ALTER TABLE registration_payments ADD COLUMN placement_side VARCHAR(10) NOT NULL DEFAULT '' AFTER sponsor_code");
+    }
     $statusCol = $pdo->query("SHOW COLUMNS FROM registration_payments LIKE 'status'")->fetch();
     $type = (string) ($statusCol['Type'] ?? '');
     if ($type !== '' && stripos($type, 'rejected') === false) {
@@ -374,6 +416,24 @@ function ensure_registration_payments_table(?PDO $pdo = null): void
     $done = true;
 }
 
+/**
+ * Private receipt storage (outside public webroot).
+ * Legacy public paths under public/assets/uploads/receipts remain readable for existing records.
+ */
+function private_receipt_uploads_dir(): string
+{
+    $dir = BASE_PATH . '/storage/receipts';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0750, true);
+    }
+    $htaccess = $dir . DIRECTORY_SEPARATOR . '.htaccess';
+    if (!is_file($htaccess)) {
+        file_put_contents($htaccess, "Require all denied\n");
+    }
+    return $dir;
+}
+
+/** @deprecated Prefer private_receipt_uploads_dir(); kept for legacy path resolution. */
 function receipt_uploads_dir(): string
 {
     $dir = BASE_PATH . '/public/assets/uploads/receipts';
@@ -407,12 +467,68 @@ function store_registration_receipt_upload(array $file): string
     if (!isset($map[$mime])) {
         throw new RuntimeException('Use a JPG, PNG, WEBP, or PDF receipt.');
     }
-    $name = 'receipt_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $map[$mime];
-    $dest = receipt_uploads_dir() . DIRECTORY_SEPARATOR . $name;
+    $name = 'receipt_' . date('YmdHis') . '_' . bin2hex(random_bytes(8)) . '.' . $map[$mime];
+    $dest = private_receipt_uploads_dir() . DIRECTORY_SEPARATOR . $name;
     if (!move_uploaded_file($tmp, $dest)) {
         throw new RuntimeException('Could not save the receipt.');
     }
-    return 'uploads/receipts/' . $name;
+    // Stored relative to BASE_PATH; never under public/.
+    return 'storage/receipts/' . $name;
+}
+
+/**
+ * Resolve a receipt path from DB to an absolute filesystem path.
+ * Allows private storage paths and legacy public upload paths only.
+ */
+function resolve_registration_receipt_path(string $proofPath): ?string
+{
+    $proofPath = str_replace('\\', '/', trim($proofPath));
+    if ($proofPath === '' || strpos($proofPath, "\0") !== false) {
+        return null;
+    }
+    // Normalize accidental leading ../assets/ or assets/ prefixes from older API responses.
+    $proofPath = preg_replace('#^(\.\./)+assets/#', 'uploads/', $proofPath) ?: $proofPath;
+    $proofPath = ltrim($proofPath, '/');
+
+    $candidates = [];
+    if (str_starts_with($proofPath, 'storage/receipts/')) {
+        $candidates[] = BASE_PATH . '/' . $proofPath;
+    } elseif (str_starts_with($proofPath, 'uploads/receipts/')) {
+        $candidates[] = BASE_PATH . '/public/assets/' . $proofPath;
+        // Migration target if an admin later moves the file privately with the same basename.
+        $candidates[] = BASE_PATH . '/storage/receipts/' . basename($proofPath);
+    } elseif (str_starts_with($proofPath, 'receipts/')) {
+        $candidates[] = BASE_PATH . '/public/assets/uploads/' . $proofPath;
+        $candidates[] = BASE_PATH . '/storage/' . $proofPath;
+    } else {
+        // Basename-only legacy values.
+        $base = basename($proofPath);
+        if ($base === '' || $base === '.' || $base === '..') {
+            return null;
+        }
+        $candidates[] = private_receipt_uploads_dir() . DIRECTORY_SEPARATOR . $base;
+        $candidates[] = receipt_uploads_dir() . DIRECTORY_SEPARATOR . $base;
+    }
+
+    $privateRoot = realpath(private_receipt_uploads_dir());
+    $legacyRoot = realpath(receipt_uploads_dir());
+    foreach ($candidates as $candidate) {
+        $real = realpath($candidate);
+        if ($real === false || !is_file($real)) {
+            continue;
+        }
+        $okPrivate = $privateRoot && str_starts_with($real, $privateRoot . DIRECTORY_SEPARATOR);
+        $okLegacy = $legacyRoot && str_starts_with($real, $legacyRoot . DIRECTORY_SEPARATOR);
+        if ($okPrivate || $okLegacy) {
+            return $real;
+        }
+    }
+    return null;
+}
+
+function naira_to_kobo(float|string $naira): int
+{
+    return (int) round(((float) $naira) * 100);
 }
 
 function app_root_url(): string
@@ -489,7 +605,16 @@ function paystack_request(string $method, string $path, ?array $payload = null):
     return $data;
 }
 
-function verify_paystack_reference(string $reference): array
+/**
+ * Strict Paystack verification.
+ *
+ * $expects keys:
+ * - amount_kobo (int, required for money checks)
+ * - currency (default NGN)
+ * - purpose (optional; compared to metadata.purpose)
+ * - reference (optional; must match verified reference exactly)
+ */
+function verify_paystack_reference(string $reference, array $expects = []): array
 {
     $reference = trim($reference);
     if ($reference === '') {
@@ -506,7 +631,48 @@ function verify_paystack_reference(string $reference): array
     if (!is_array($data) || strtolower((string) ($data['status'] ?? '')) !== 'success') {
         return ['ok' => false, 'error' => 'Payment was not successful.'];
     }
-    return ['ok' => true, 'data' => $data];
+
+    $verifiedRef = trim((string) ($data['reference'] ?? ''));
+    $expectedRef = trim((string) ($expects['reference'] ?? $reference));
+    if ($verifiedRef === '' || !hash_equals($expectedRef, $verifiedRef)) {
+        return ['ok' => false, 'error' => 'Paystack reference does not match the expected payment reference.'];
+    }
+
+    $currency = strtoupper(trim((string) ($expects['currency'] ?? 'NGN')));
+    $verifiedCurrency = strtoupper(trim((string) ($data['currency'] ?? '')));
+    if ($verifiedCurrency !== $currency) {
+        return ['ok' => false, 'error' => 'Payment currency must be ' . $currency . '.'];
+    }
+
+    if (array_key_exists('amount_kobo', $expects)) {
+        $expectedKobo = (int) $expects['amount_kobo'];
+        $verifiedKobo = (int) ($data['amount'] ?? -1);
+        if ($expectedKobo < 1 || $verifiedKobo !== $expectedKobo) {
+            return ['ok' => false, 'error' => 'Paid amount does not match the expected amount.'];
+        }
+    }
+
+    $expectedPurpose = trim((string) ($expects['purpose'] ?? ''));
+    if ($expectedPurpose !== '') {
+        $meta = $data['metadata'] ?? [];
+        if (!is_array($meta)) {
+            $meta = [];
+        }
+        $purpose = trim((string) ($meta['purpose'] ?? ''));
+        // If Paystack returns a purpose, it must match. Missing purpose is tolerated
+        // only because the internal payment/order row was already bound by reference.
+        if ($purpose !== '' && !hash_equals($expectedPurpose, $purpose)) {
+            return ['ok' => false, 'error' => 'Payment purpose does not match this transaction type.'];
+        }
+    }
+
+    return [
+        'ok' => true,
+        'data' => $data,
+        'reference' => $verifiedRef,
+        'amount_kobo' => (int) ($data['amount'] ?? 0),
+        'currency' => $verifiedCurrency,
+    ];
 }
 
 function ensure_award_rank_schema(?PDO $pdo = null): void

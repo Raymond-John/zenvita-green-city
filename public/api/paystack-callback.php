@@ -13,56 +13,99 @@ if ($reference === '') {
 }
 
 $pdo = db();
-$stmt = $pdo->prepare('SELECT * FROM registration_payments WHERE reference = ? LIMIT 1');
-$stmt->execute([$reference]);
-$payment = $stmt->fetch();
+$pdo->beginTransaction();
+try {
+    $stmt = $pdo->prepare('SELECT * FROM registration_payments WHERE reference = ? LIMIT 1 FOR UPDATE');
+    $stmt->execute([$reference]);
+    $payment = $stmt->fetch();
 
-if (!$payment) {
-    header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode('Payment record not found.'));
-    exit;
-}
-
-if (in_array($payment['status'], ['paid', 'registered', 'funded'], true)) {
-    $_SESSION['reg_payment_ref'] = $reference;
-    $qs = 'paid=1&ref=' . rawurlencode($reference);
-    if (!empty($_SESSION['reg_sponsor'])) {
-        $qs .= '&sponsor=' . rawurlencode((string) $_SESSION['reg_sponsor']);
+    if (!$payment) {
+        $pdo->rollBack();
+        header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode('Payment record not found.'));
+        exit;
     }
-    if (!empty($_SESSION['reg_side'])) {
-        $qs .= '&side=' . rawurlencode((string) $_SESSION['reg_side']);
+
+    $sponsorQs = trim((string) ($payment['sponsor_code'] ?? ''));
+    $sideQs = strtolower(trim((string) ($payment['placement_side'] ?? '')));
+    if ($sponsorQs === '' && !empty($_SESSION['reg_sponsor'])) {
+        $sponsorQs = (string) $_SESSION['reg_sponsor'];
     }
-    header('Location: ' . $registerUrl . '?' . $qs);
+    if (!in_array($sideQs, ['left', 'right'], true) && !empty($_SESSION['reg_side'])) {
+        $sideQs = (string) $_SESSION['reg_side'];
+    }
+
+    if (in_array($payment['status'], ['paid', 'registered', 'funded'], true)) {
+        $pdo->commit();
+        $_SESSION['reg_payment_ref'] = $reference;
+        if ($sponsorQs !== '') {
+            $_SESSION['reg_sponsor'] = $sponsorQs;
+        }
+        if (in_array($sideQs, ['left', 'right'], true)) {
+            $_SESSION['reg_side'] = $sideQs;
+        }
+        $qs = 'paid=1&ref=' . rawurlencode($reference);
+        if ($sponsorQs !== '') {
+            $qs .= '&sponsor=' . rawurlencode($sponsorQs);
+        }
+        if (in_array($sideQs, ['left', 'right'], true)) {
+            $qs .= '&side=' . rawurlencode($sideQs);
+        }
+        header('Location: ' . $registerUrl . '?' . $qs);
+        exit;
+    }
+
+    if (($payment['status'] ?? '') !== 'pending') {
+        $pdo->rollBack();
+        header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode('This payment cannot be completed.'));
+        exit;
+    }
+
+    $verified = verify_paystack_reference($reference, [
+        'reference' => $reference,
+        'amount_kobo' => naira_to_kobo($payment['amount']),
+        'currency' => 'NGN',
+        'purpose' => 'registration',
+    ]);
+    if (empty($verified['ok'])) {
+        $pdo->rollBack();
+        header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode($verified['error'] ?? 'Verification failed.'));
+        exit;
+    }
+
+    $paystackRef = (string) ($verified['reference'] ?? $reference);
+    $upd = $pdo->prepare(
+        "UPDATE registration_payments
+         SET status = 'paid', paystack_reference = ?, updated_at = NOW()
+         WHERE reference = ? AND status = 'pending'"
+    );
+    $upd->execute([$paystackRef, $reference]);
+    if ($upd->rowCount() !== 1) {
+        $pdo->rollBack();
+        header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode('Payment was already processed.'));
+        exit;
+    }
+    $pdo->commit();
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode('Payment verification failed.'));
     exit;
 }
-
-$verified = verify_paystack_reference($reference);
-if (empty($verified['ok'])) {
-    header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode($verified['error'] ?? 'Verification failed.'));
-    exit;
-}
-
-$data = $verified['data'];
-$paidAmount = round(((float) ($data['amount'] ?? 0)) / 100, 2);
-$expected = round((float) $payment['amount'], 2);
-if ($paidAmount + 0.01 < $expected) {
-    header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode('Paid amount does not match the package price.'));
-    exit;
-}
-
-$paystackRef = (string) ($data['reference'] ?? $reference);
-$pdo->prepare(
-    "UPDATE registration_payments
-     SET status = 'paid', paystack_reference = ?, updated_at = NOW()
-     WHERE reference = ? AND status = 'pending'"
-)->execute([$paystackRef, $reference]);
 
 $_SESSION['reg_payment_ref'] = $reference;
-$qs = 'paid=1&ref=' . rawurlencode($reference);
-if (!empty($_SESSION['reg_sponsor'])) {
-    $qs .= '&sponsor=' . rawurlencode((string) $_SESSION['reg_sponsor']);
+if ($sponsorQs !== '') {
+    $_SESSION['reg_sponsor'] = $sponsorQs;
 }
-if (!empty($_SESSION['reg_side'])) {
-    $qs .= '&side=' . rawurlencode((string) $_SESSION['reg_side']);
+if (in_array($sideQs, ['left', 'right'], true)) {
+    $_SESSION['reg_side'] = $sideQs;
+}
+$qs = 'paid=1&ref=' . rawurlencode($reference);
+if ($sponsorQs !== '') {
+    $qs .= '&sponsor=' . rawurlencode($sponsorQs);
+}
+if (in_array($sideQs, ['left', 'right'], true)) {
+    $qs .= '&side=' . rawurlencode($sideQs);
 }
 header('Location: ' . $registerUrl . '?' . $qs);
 exit;

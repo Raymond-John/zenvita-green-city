@@ -1,0 +1,3 @@
+# Deny direct web access to legacy receipt files.
+# Admins must use /api/admin-receipt.php
+Require all denied

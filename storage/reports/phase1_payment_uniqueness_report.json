@@ -1,0 +1,10 @@
+{
+    "generated_at": "2026-11-27T19:34:14+01:00",
+    "orders_duplicate_payment_reference": [],
+    "orders_duplicate_paystack_reference": [],
+    "order_notifications_duplicate_order_id": [],
+    "transactions_duplicate_reference": [],
+    "public_receipt_files": 0,
+    "db_proof_paths": 0,
+    "recommendation": "No automatic delete\/merge. Unique indexes on orders.payment_reference and orders.paystack_reference are safe (0 duplicates). Unique on order_notifications.order_id is safe."
+}

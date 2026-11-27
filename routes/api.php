@@ -34,6 +34,8 @@ return [
         'POST /api/admin-withdrawal.php' => 'Approve/reject withdrawals',
         'GET  /api/admin-orders.php' => 'Portal orders/stores',
         'GET  /api/admin-payments.php' => 'Registration payments',
+        'GET  /api/admin-receipt.php' => 'Authenticated admin receipt download',
+        'POST /api/admin-payment-review.php' => 'Approve/reject transfer receipts',
         'POST /api/admin-pairing.php' => 'Trigger pairing',
         'POST /api/admin-landing-feature.php' => 'Homepage features',
     ],
@@ -47,6 +49,5 @@ return [
         'GET  /api/paystack-order-callback.php' => 'Paystack product-order callback',
         'GET  /api/paystack-status.php' => 'Payment status',
         'POST /api/registration-proof.php' => 'Upload bank/cash payment receipt',
-        'POST /api/admin-payment-review.php' => 'Approve/reject transfer receipts',
     ],
 ];

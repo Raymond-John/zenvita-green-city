@@ -224,11 +224,17 @@ $payError = htmlspecialchars(trim((string) ($_GET['error'] ?? '')), ENT_QUOTES, 
             document.getElementById("regPackage").disabled = true;
           }
           var params = new URLSearchParams(window.location.search);
-          var sponsor = params.get("sponsor") || document.getElementById("paySponsor").value;
-          var side = params.get("side") || (document.querySelector("input[name='paySide']:checked") || {}).value || "left";
-          if (sponsor) document.getElementById("regSponsor").value = sponsor;
+          var sponsor = data.sponsor || params.get("sponsor") || document.getElementById("paySponsor").value;
+          var side = data.side || params.get("side") || (document.querySelector("input[name='paySide']:checked") || {}).value || "left";
+          if (sponsor) {
+            document.getElementById("regSponsor").value = sponsor;
+            document.getElementById("regSponsor").readOnly = true;
+          }
           var sideInput = document.querySelector("input[name='side'][value='" + side + "']");
           if (sideInput) sideInput.checked = true;
+          document.querySelectorAll("input[name='side']").forEach(function (input) {
+            input.disabled = true;
+          });
         }
 
         function showPending(message, reference) {

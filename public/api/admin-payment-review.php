@@ -20,9 +20,9 @@ if ($reference === '' || !in_array($action, ['approve', 'reject'], true)) {
 }
 
 $pdo = db();
-$stmt = $pdo->prepare('SELECT * FROM registration_payments WHERE reference = ? LIMIT 1 FOR UPDATE');
 $pdo->beginTransaction();
 try {
+    $stmt = $pdo->prepare('SELECT * FROM registration_payments WHERE reference = ? LIMIT 1 FOR UPDATE');
     $stmt->execute([$reference]);
     $payment = $stmt->fetch();
     if (!$payment) {
@@ -33,17 +33,30 @@ try {
         $pdo->rollBack();
         json_out(['ok' => false, 'error' => 'Only pending payments can be reviewed.'], 422);
     }
-    if (($payment['payment_method'] ?? 'paystack') !== 'transfer' && empty($payment['proof_path'])) {
+
+    $method = strtolower(trim((string) ($payment['payment_method'] ?? 'paystack')));
+    if ($method !== 'transfer') {
         $pdo->rollBack();
-        json_out(['ok' => false, 'error' => 'This record is not a transfer receipt awaiting review.'], 422);
+        json_out(['ok' => false, 'error' => 'Only bank-transfer receipt payments can be approved here. Paystack payments are verified automatically.'], 422);
+    }
+
+    $proofPath = trim((string) ($payment['proof_path'] ?? ''));
+    if ($proofPath === '' || resolve_registration_receipt_path($proofPath) === null) {
+        $pdo->rollBack();
+        json_out(['ok' => false, 'error' => 'A valid payment receipt is required before approving a transfer.'], 422);
     }
 
     $newStatus = $action === 'approve' ? 'paid' : 'rejected';
-    $pdo->prepare(
+    $upd = $pdo->prepare(
         'UPDATE registration_payments
          SET status = ?, admin_note = ?, reviewed_by = ?, reviewed_at = NOW(), updated_at = NOW()
          WHERE reference = ? AND status = \'pending\''
-    )->execute([$newStatus, $note, (int) $admin['id'], $reference]);
+    );
+    $upd->execute([$newStatus, $note, (int) $admin['id'], $reference]);
+    if ($upd->rowCount() !== 1) {
+        $pdo->rollBack();
+        json_out(['ok' => false, 'error' => 'Payment was already reviewed.'], 409);
+    }
 
     $pdo->commit();
 } catch (Throwable $e) {

@@ -68,18 +68,20 @@ try {
     json_out(['ok' => false, 'error' => $e->getMessage()], 422);
 }
 
-$reference = 'ZGV-TRF-' . date('ymdHis') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+$reference = 'ZGV-TRF-' . date('ymdHis') . '-' . strtoupper(bin2hex(random_bytes(6)));
 
 $pdo->prepare(
     'INSERT INTO registration_payments
-        (reference, email, amount, package_id, package_name, payment_method, proof_path, notes, status)
-     VALUES (?, ?, ?, ?, ?, \'transfer\', ?, ?, \'pending\')'
+        (reference, email, amount, package_id, package_name, sponsor_code, placement_side, payment_method, proof_path, notes, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, \'transfer\', ?, ?, \'pending\')'
 )->execute([
     $reference,
     $email,
     $amount,
     (int) $packageRow['id'],
     $packageRow['name'],
+    $sponsorHint,
+    $sideHint,
     $proofPath,
     $notes,
 ]);

@@ -1085,9 +1085,9 @@
           ? Z.escapeHtml(row.memberCode) + (row.memberName ? " · " + Z.escapeHtml(row.memberName) : "")
           : Z.escapeHtml(row.email);
         var method = Z.escapeHtml(row.method || "paystack");
-        var receipt = row.proofPath
-          ? '<a href="' + Z.escapeHtml(row.proofPath) + '" target="_blank" rel="noopener">View</a>'
-          : "—";
+        var receipt = row.proofUrl
+          ? '<a href="' + Z.escapeHtml(row.proofUrl) + '" target="_blank" rel="noopener">View</a>'
+          : (row.hasProof ? "Receipt on file" : "—");
         var actions = "—";
         if (row.canReview) {
           actions = '<button class="btn btn-soft btn-sm" type="button" data-pay-approve="' + Z.escapeHtml(row.reference) + '">Approve</button> ' +

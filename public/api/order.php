@@ -62,8 +62,9 @@ if ($totalAmount < 100) {
     json_out(['ok' => false, 'error' => 'Order amount is too low for Paystack (minimum ₦100).'], 422);
 }
 
-$reference = 'ORD' . date('ymd') . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
-$paymentReference = 'ZGV-ORD-' . date('ymdHis') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+$totalKobo = naira_to_kobo($totalAmount);
+$reference = 'ORD' . date('ymd') . strtoupper(bin2hex(random_bytes(6)));
+$paymentReference = 'ZGV-ORD-' . date('ymdHis') . '-' . strtoupper(bin2hex(random_bytes(6)));
 $callback = app_root_url() . '/api/paystack-order-callback';
 
 try {
@@ -102,7 +103,7 @@ try {
 
 $init = paystack_request('POST', '/transaction/initialize', [
     'email' => $email,
-    'amount' => (int) round($totalAmount * 100),
+    'amount' => $totalKobo,
     'currency' => 'NGN',
     'reference' => $paymentReference,
     'callback_url' => $callback,
