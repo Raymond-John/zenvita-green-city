@@ -376,6 +376,96 @@ foreach ($dupRows as $row) {
 }
 t_assert('Wallet integrity: duplicate ancestors not paid twice', $dupOk && count($dupRows) >= 1, json_encode($dupRows));
 
+// ----- Pairing wallet integrity -----
+reset_test_db();
+$pdo = db();
+// Root has enough matched PV for one pair (pair_pv=60). Wallet exists from fixture.
+$pdo->prepare('UPDATE users SET left_pv = 60, right_pv = 60 WHERE id = 1')->execute();
+$pairBalBefore = (float) $pdo->query('SELECT available_balance FROM wallets WHERE user_id = 1')->fetchColumn();
+$pdo->beginTransaction();
+try {
+    $pairResult = settle_binary_pairing($pdo, 1);
+    $pdo->commit();
+    $pairBalAfter = (float) $pdo->query('SELECT available_balance FROM wallets WHERE user_id = 1')->fetchColumn();
+    $pairComm = (int) $pdo->query(
+        "SELECT COUNT(*) FROM commissions WHERE user_id = 1 AND commission_type = 'Pairing'"
+    )->fetchColumn();
+    $leftAfter = (int) $pdo->query('SELECT left_pv FROM users WHERE id = 1')->fetchColumn();
+    $rightAfter = (int) $pdo->query('SELECT right_pv FROM users WHERE id = 1')->fetchColumn();
+    t_assert(
+        'Pairing: successful wallet credit',
+        is_array($pairResult)
+            && (int) ($pairResult['pairs'] ?? 0) === 1
+            && abs((float) ($pairResult['amount'] ?? 0) - 3000.0) < 0.001
+            && $pairComm === 1
+            && abs($pairBalAfter - ($pairBalBefore + 3000.0)) < 0.001
+            && $leftAfter === 0
+            && $rightAfter === 0,
+        json_encode([
+            'result' => $pairResult,
+            'bal_before' => $pairBalBefore,
+            'bal_after' => $pairBalAfter,
+            'left' => $leftAfter,
+            'right' => $rightAfter,
+        ])
+    );
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    t_assert('Pairing: successful wallet credit', false, $e->getMessage());
+}
+
+// Missing pairing wallet → exception; rollback restores PV and leaves no orphan commission/tx
+reset_test_db();
+$pdo = db();
+$pdo->prepare('UPDATE users SET left_pv = 60, right_pv = 60 WHERE id = 1')->execute();
+$pdo->prepare('DELETE FROM wallets WHERE user_id = 1')->execute();
+$pairCommBefore = (int) $pdo->query('SELECT COUNT(*) FROM commissions')->fetchColumn();
+$pairTxBefore = (int) $pdo->query('SELECT COUNT(*) FROM transactions')->fetchColumn();
+$leftBeforeMissing = (int) $pdo->query('SELECT left_pv FROM users WHERE id = 1')->fetchColumn();
+$rightBeforeMissing = (int) $pdo->query('SELECT right_pv FROM users WHERE id = 1')->fetchColumn();
+$pdo->beginTransaction();
+$pairMissingThrew = false;
+$pairMissingCode = '';
+try {
+    settle_binary_pairing($pdo, 1);
+    $pdo->commit();
+} catch (RuntimeException $e) {
+    $pairMissingThrew = true;
+    $pairMissingCode = $e->getMessage();
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    $pairMissingCode = $e->getMessage();
+}
+t_assert(
+    'Pairing: missing wallet throws PAIRING_WALLET_MISSING',
+    $pairMissingThrew && $pairMissingCode === 'PAIRING_WALLET_MISSING',
+    $pairMissingCode
+);
+$pairCommAfter = (int) $pdo->query('SELECT COUNT(*) FROM commissions')->fetchColumn();
+$pairTxAfter = (int) $pdo->query('SELECT COUNT(*) FROM transactions')->fetchColumn();
+$leftAfterMissing = (int) $pdo->query('SELECT left_pv FROM users WHERE id = 1')->fetchColumn();
+$rightAfterMissing = (int) $pdo->query('SELECT right_pv FROM users WHERE id = 1')->fetchColumn();
+t_assert(
+    'Pairing: missing wallet leaves no orphan commission/tx/PV after rollback',
+    $pairCommAfter === $pairCommBefore
+        && $pairTxAfter === $pairTxBefore
+        && $leftAfterMissing === $leftBeforeMissing
+        && $rightAfterMissing === $rightBeforeMissing,
+    json_encode([
+        'comm' => [$pairCommBefore, $pairCommAfter],
+        'tx' => [$pairTxBefore, $pairTxAfter],
+        'left' => [$leftBeforeMissing, $leftAfterMissing],
+        'right' => [$rightBeforeMissing, $rightAfterMissing],
+    ])
+);
+
 // ----- Registration payment binding / tamper -----
 reset_test_db();
 $pdo = db();

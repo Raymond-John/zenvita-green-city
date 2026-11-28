@@ -2320,6 +2320,13 @@ function settle_binary_pairing(PDO $pdo, int $userId): ?array
     $pvDeducted = $pairsToPay * $pairPv;
     $totalAmount = round($pairsToPay * $pairAmount, 2);
 
+    // Lock wallet before PV deduction or commission/transaction writes (caller owns the txn).
+    $walletLock = $pdo->prepare('SELECT user_id FROM wallets WHERE user_id = ? FOR UPDATE');
+    $walletLock->execute([$userId]);
+    if ($walletLock->fetch(PDO::FETCH_ASSOC) === false) {
+        throw new RuntimeException('PAIRING_WALLET_MISSING');
+    }
+
     // Deduct matched PV
     $pdo->prepare('UPDATE users SET left_pv = left_pv - ?, right_pv = right_pv - ? WHERE id = ?')
         ->execute([$pvDeducted, $pvDeducted, $userId]);
@@ -2338,9 +2345,12 @@ function settle_binary_pairing(PDO $pdo, int $userId): ?array
          VALUES (?, ?, \'Commission\', ?, ?, \'Approved\', CURDATE())'
     )->execute([$userId, $reference, $description, $totalAmount]);
 
-    // Update wallet
-    $pdo->prepare('UPDATE wallets SET available_balance = available_balance + ? WHERE user_id = ?')
-        ->execute([$totalAmount, $userId]);
+    // Credit wallet and require exactly one affected row.
+    $walletUpd = $pdo->prepare('UPDATE wallets SET available_balance = available_balance + ? WHERE user_id = ?');
+    $walletUpd->execute([$totalAmount, $userId]);
+    if ($walletUpd->rowCount() !== 1) {
+        throw new RuntimeException('PAIRING_WALLET_UPDATE_FAILED');
+    }
 
     return [
         'userId' => $userId,

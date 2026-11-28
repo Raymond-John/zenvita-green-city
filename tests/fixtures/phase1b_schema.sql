@@ -165,8 +165,13 @@ CREATE TABLE transactions (
   tx_date DATE NOT NULL
 );
 
-INSERT INTO packages (id, code, name, price, bottles, pv, direct_bonus) VALUES
-(1, 'vision', 'Vision', 150000.00, 8, 150, 45000.00);
+INSERT INTO packages (id, code, name, price, bottles, pv, direct_bonus, daily_pairs, pair_amount, daily_cap) VALUES
+(1, 'vision', 'Vision', 150000.00, 8, 150, 45000.00, 10, 3000.00, 30000.00);
+
+INSERT INTO settings (setting_key, setting_value) VALUES
+('pair_pv', '60'),
+('binary_qualification', '0'),
+('site_name', 'Cellvigor Biorevive LTD');
 
 INSERT INTO users (id, member_code, username, email, phone, password_hash, first_name, last_name, role, package_id, sponsor_id, parent_id, binary_side, status)
 VALUES
