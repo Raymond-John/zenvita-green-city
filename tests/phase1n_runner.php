@@ -224,6 +224,158 @@ $none = (int) $pdo->query(
 )->fetchColumn();
 t_assert('Commissions: missing upline pays nobody', $none === 0);
 
+// ----- Phase 1O: wallet integrity (direct + indirect) -----
+reset_test_db();
+$pdo = db();
+$chainDirect = seed_sponsor_chain($pdo, 1); // [root=1, g1]
+$sponsorDirect = (int) $chainDirect[1];
+$parentDirect = (int) $chainDirect[1];
+$beforeDirectBal = (float) $pdo->query('SELECT available_balance FROM wallets WHERE user_id = ' . $sponsorDirect)->fetchColumn();
+$pdo->beginTransaction();
+try {
+    registration_apply_sponsor_rewards(
+        $pdo,
+        900010,
+        'Direct',
+        'Credit',
+        $sponsorDirect,
+        $parentDirect,
+        'left',
+        $packageRow
+    );
+    $pdo->commit();
+    $afterDirectBal = (float) $pdo->query('SELECT available_balance FROM wallets WHERE user_id = ' . $sponsorDirect)->fetchColumn();
+    $directComm = (int) $pdo->query(
+        "SELECT COUNT(*) FROM commissions WHERE user_id = {$sponsorDirect} AND commission_type = 'Direct Referral' AND source_label = 'Direct Credit'"
+    )->fetchColumn();
+    $directTx = (int) $pdo->query(
+        "SELECT COUNT(*) FROM transactions WHERE user_id = {$sponsorDirect} AND description = 'Direct referral'"
+    )->fetchColumn();
+    t_assert(
+        'Wallet integrity: direct commission credits sponsor wallet',
+        $directComm === 1
+            && $directTx === 1
+            && abs($afterDirectBal - ($beforeDirectBal + (float) $packageRow['direct_bonus'])) < 0.001,
+        'bal_before=' . $beforeDirectBal . ' bal_after=' . $afterDirectBal
+    );
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    t_assert('Wallet integrity: direct commission credits sponsor wallet', false, $e->getMessage());
+}
+
+// Missing direct sponsor wallet → fail; rollback leaves no orphan commission/tx
+reset_test_db();
+$pdo = db();
+$chainMissingDirect = seed_sponsor_chain($pdo, 1);
+$sponsorMissing = (int) $chainMissingDirect[1];
+$parentMissing = (int) $chainMissingDirect[1];
+$pdo->prepare('DELETE FROM wallets WHERE user_id = ?')->execute([$sponsorMissing]);
+$commBefore = (int) $pdo->query('SELECT COUNT(*) FROM commissions')->fetchColumn();
+$txBefore = (int) $pdo->query('SELECT COUNT(*) FROM transactions')->fetchColumn();
+$pdo->beginTransaction();
+$directMissingThrew = false;
+$directMissingCode = '';
+try {
+    registration_apply_sponsor_rewards(
+        $pdo,
+        900011,
+        'Missing',
+        'Wallet',
+        $sponsorMissing,
+        $parentMissing,
+        'left',
+        $packageRow
+    );
+    $pdo->commit();
+} catch (RuntimeException $e) {
+    $directMissingThrew = true;
+    $directMissingCode = $e->getMessage();
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    $directMissingCode = $e->getMessage();
+}
+t_assert(
+    'Wallet integrity: missing direct sponsor wallet fails',
+    $directMissingThrew && $directMissingCode === 'SPONSOR_WALLET_MISSING',
+    $directMissingCode
+);
+$commAfter = (int) $pdo->query('SELECT COUNT(*) FROM commissions')->fetchColumn();
+$txAfter = (int) $pdo->query('SELECT COUNT(*) FROM transactions')->fetchColumn();
+t_assert(
+    'Wallet integrity: missing direct wallet leaves no orphan commission/tx',
+    $commAfter === $commBefore && $txAfter === $txBefore,
+    "comm {$commBefore}->{$commAfter} tx {$txBefore}->{$txAfter}"
+);
+
+// Missing indirect ancestor wallet → fail before commission/tx for that ancestor; rollback cleans prior writes
+reset_test_db();
+$pdo = db();
+$chainMissingInd = seed_sponsor_chain($pdo, 3); // root, g1, g2, g3
+$missingAncestor = (int) $chainMissingInd[2]; // first paid gen above g3
+$pdo->prepare('DELETE FROM wallets WHERE user_id = ?')->execute([$missingAncestor]);
+$commBeforeInd = (int) $pdo->query('SELECT COUNT(*) FROM commissions')->fetchColumn();
+$txBeforeInd = (int) $pdo->query('SELECT COUNT(*) FROM transactions')->fetchColumn();
+$pdo->beginTransaction();
+$indMissingThrew = false;
+$indMissingCode = '';
+try {
+    registration_pay_indirect($pdo, 900012, 'Ind Missing', (int) $chainMissingInd[3], $packageRow);
+    $pdo->commit();
+} catch (RuntimeException $e) {
+    $indMissingThrew = true;
+    $indMissingCode = $e->getMessage();
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    $indMissingCode = $e->getMessage();
+}
+t_assert(
+    'Wallet integrity: missing indirect ancestor wallet fails',
+    $indMissingThrew && $indMissingCode === 'INDIRECT_WALLET_MISSING',
+    $indMissingCode
+);
+$commAfterInd = (int) $pdo->query('SELECT COUNT(*) FROM commissions')->fetchColumn();
+$txAfterInd = (int) $pdo->query('SELECT COUNT(*) FROM transactions')->fetchColumn();
+t_assert(
+    'Wallet integrity: missing indirect wallet leaves no orphan commission/tx',
+    $commAfterInd === $commBeforeInd && $txAfterInd === $txBeforeInd,
+    "comm {$commBeforeInd}->{$commAfterInd} tx {$txBeforeInd}->{$txAfterInd}"
+);
+
+// Duplicate ancestor in sponsor cycle is not paid twice
+reset_test_db();
+$pdo = db();
+$cycle = seed_sponsor_chain($pdo, 2); // [1, g1, g2] with sponsors: g1->1, g2->g1
+// Create a cycle g1 <-> g2 so walk from g2 hits g1, then g2, then g1 again.
+$pdo->prepare('UPDATE users SET sponsor_id = ? WHERE id = ?')->execute([(int) $cycle[2], (int) $cycle[1]]);
+$pdo->beginTransaction();
+registration_pay_indirect($pdo, 900013, 'Dup Cycle', (int) $cycle[2], $packageRow);
+$pdo->commit();
+$dupRows = $pdo->query(
+    "SELECT user_id, COUNT(*) AS c FROM commissions
+     WHERE commission_type = 'Indirect Referral' AND source_label = 'Dup Cycle'
+     GROUP BY user_id"
+)->fetchAll();
+$dupOk = true;
+foreach ($dupRows as $row) {
+    if ((int) $row['c'] > 1) {
+        $dupOk = false;
+        break;
+    }
+}
+t_assert('Wallet integrity: duplicate ancestors not paid twice', $dupOk && count($dupRows) >= 1, json_encode($dupRows));
+
 // ----- Registration payment binding / tamper -----
 reset_test_db();
 $pdo = db();

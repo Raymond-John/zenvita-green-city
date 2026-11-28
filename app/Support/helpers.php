@@ -1477,6 +1477,15 @@ function registration_apply_sponsor_rewards(
     process_upline_pairing($pdo, (int) $parentId);
     $bonus = (float) $packageRow['direct_bonus'];
     $label = trim($first . ' ' . $last);
+
+    // Lock sponsor wallet before any commission/transaction writes (caller owns the txn).
+    $walletLock = $pdo->prepare('SELECT user_id, available_balance FROM wallets WHERE user_id = ? FOR UPDATE');
+    $walletLock->execute([$sponsorId]);
+    $walletRow = $walletLock->fetch(PDO::FETCH_ASSOC);
+    if (!$walletRow) {
+        throw new RuntimeException('SPONSOR_WALLET_MISSING');
+    }
+
     $pdo->prepare(
         'INSERT INTO commissions (user_id, source_label, commission_type, package_name, pv, amount, status, earned_on)
          VALUES (?, ?, \'Direct Referral\', ?, ?, ?, \'Approved\', CURDATE())'
@@ -1486,8 +1495,13 @@ function registration_apply_sponsor_rewards(
         'INSERT INTO transactions (user_id, reference, tx_type, description, amount, status, tx_date)
          VALUES (?, ?, \'Commission\', ?, ?, \'Approved\', CURDATE())'
     )->execute([$sponsorId, $reference, 'Direct referral', $bonus]);
-    $pdo->prepare('UPDATE wallets SET available_balance = available_balance + ? WHERE user_id = ?')
-        ->execute([$bonus, $sponsorId]);
+    if ($bonus > 0) {
+        $walletUpd = $pdo->prepare('UPDATE wallets SET available_balance = available_balance + ? WHERE user_id = ?');
+        $walletUpd->execute([$bonus, $sponsorId]);
+        if ($walletUpd->rowCount() !== 1) {
+            throw new RuntimeException('SPONSOR_WALLET_UPDATE_FAILED');
+        }
+    }
     registration_pay_indirect($pdo, $userId, $label, $sponsorId, $packageRow);
 }
 
@@ -1502,7 +1516,8 @@ function registration_pay_indirect(PDO $pdo, int $newUserId, string $newName, in
     $rates = indirect_generation_rates();
     $upline = $pdo->prepare('SELECT sponsor_id FROM users WHERE id = ?');
     $status = $pdo->prepare('SELECT status FROM users WHERE id = ?');
-    $walletLock = $pdo->prepare('SELECT available_balance FROM wallets WHERE user_id = ? FOR UPDATE');
+    $walletLock = $pdo->prepare('SELECT user_id, available_balance FROM wallets WHERE user_id = ? FOR UPDATE');
+    $walletUpd = $pdo->prepare('UPDATE wallets SET available_balance = available_balance + ? WHERE user_id = ?');
     $current = $sponsorId;
     $paidAncestors = [];
     foreach ($rates as $index => $rate) {
@@ -1520,6 +1535,11 @@ function registration_pay_indirect(PDO $pdo, int $newUserId, string $newName, in
         $amount = round(((float) $packageRow['price']) * ((float) $rate) / 100, 2);
         if ($ancestorStatus !== 'suspended' && $amount > 0) {
             $walletLock->execute([$ancestorId]);
+            $walletRow = $walletLock->fetch(PDO::FETCH_ASSOC);
+            if (!$walletRow) {
+                throw new RuntimeException('INDIRECT_WALLET_MISSING');
+            }
+
             $pdo->prepare(
                 'INSERT INTO commissions (user_id, source_label, commission_type, package_name, pv, amount, status, earned_on)
                  VALUES (?, ?, \'Indirect Referral\', ?, ?, ?, \'Approved\', CURDATE())'
@@ -1535,8 +1555,10 @@ function registration_pay_indirect(PDO $pdo, int $newUserId, string $newName, in
                 'INSERT INTO transactions (user_id, reference, tx_type, description, amount, status, tx_date)
                  VALUES (?, ?, \'Commission\', ?, ?, \'Approved\', CURDATE())'
             )->execute([$ancestorId, $reference, 'Indirect referral gen ' . ($index + 1), $amount]);
-            $pdo->prepare('UPDATE wallets SET available_balance = available_balance + ? WHERE user_id = ?')
-                ->execute([$amount, $ancestorId]);
+            $walletUpd->execute([$amount, $ancestorId]);
+            if ($walletUpd->rowCount() !== 1) {
+                throw new RuntimeException('INDIRECT_WALLET_UPDATE_FAILED');
+            }
             $paidAncestors[$ancestorId] = true;
         }
         $current = $ancestorId;
