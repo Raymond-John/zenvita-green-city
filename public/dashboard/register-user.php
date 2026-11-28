@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../api/bootstrap.php';
 $pdo = db();
 ensure_package_description_column($pdo);
@@ -173,6 +173,7 @@ $packages = $pdo->query('SELECT code, name, description, price, pv, bottles FROM
   </div>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="../assets/js/main.js"></script>
+  <script src="../assets/js/withdrawal-policy.js"></script>
   <script src="../assets/js/dashboard.js"></script>
 </body>
 </html>

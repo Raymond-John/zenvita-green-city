@@ -87,11 +87,25 @@ $init = paystack_request('POST', '/transaction/initialize', [
 if (empty($init['ok']) || empty($init['data']['authorization_url'])) {
     $pdo->prepare("UPDATE orders SET payment_status = 'failed' WHERE id = ? AND payment_status <> 'paid'")
         ->execute([(int) $order['id']]);
+    payment_audit_log('paystack.init.failed', [
+        'outcome' => 'init_failed',
+        'reference' => $paymentReference,
+        'related_id' => (int) $order['id'],
+        'purpose' => 'product_order',
+    ]);
     json_out([
         'ok' => false,
         'error' => (string) ($init['message'] ?? $init['error'] ?? 'Could not start Paystack payment.'),
     ], 502);
 }
+
+payment_audit_log('paystack.init', [
+    'outcome' => 'initialized',
+    'reference' => $paymentReference,
+    'related_id' => (int) $order['id'],
+    'purpose' => 'product_order',
+    'amount_kobo' => $amountKobo,
+]);
 
 json_out([
     'ok' => true,

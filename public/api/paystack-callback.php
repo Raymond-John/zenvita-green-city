@@ -8,6 +8,10 @@ $reference = trim((string) ($_GET['reference'] ?? $_GET['trxref'] ?? ''));
 $registerUrl = app_root_url() . '/register';
 
 if ($reference === '') {
+    payment_audit_log('paystack.verify.failed', [
+        'outcome' => 'missing_reference',
+        'purpose' => 'registration',
+    ]);
     header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode('Missing payment reference.'));
     exit;
 }
@@ -21,6 +25,11 @@ try {
 
     if (!$payment) {
         $pdo->rollBack();
+        payment_audit_log('paystack.verify.failed', [
+            'outcome' => 'payment_missing',
+            'reference' => $reference,
+            'purpose' => 'registration',
+        ]);
         header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode('Payment record not found.'));
         exit;
     }
@@ -36,6 +45,12 @@ try {
 
     if (in_array($payment['status'], ['paid', 'registered', 'funded'], true)) {
         $pdo->commit();
+        payment_audit_log('paystack.callback.duplicate', [
+            'outcome' => 'already_' . (string) $payment['status'],
+            'reference' => $reference,
+            'related_id' => (int) ($payment['id'] ?? 0),
+            'purpose' => 'registration',
+        ]);
         $_SESSION['reg_payment_ref'] = $reference;
         if ($sponsorQs !== '') {
             $_SESSION['reg_sponsor'] = $sponsorQs;
@@ -56,6 +71,13 @@ try {
 
     if (($payment['status'] ?? '') !== 'pending') {
         $pdo->rollBack();
+        payment_audit_log('paystack.verify.failed', [
+            'outcome' => 'invalid_status',
+            'reference' => $reference,
+            'related_id' => (int) ($payment['id'] ?? 0),
+            'status' => (string) ($payment['status'] ?? ''),
+            'purpose' => 'registration',
+        ]);
         header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode('This payment cannot be completed.'));
         exit;
     }
@@ -68,6 +90,13 @@ try {
     ]);
     if (empty($verified['ok'])) {
         $pdo->rollBack();
+        payment_audit_log('paystack.verify.failed', [
+            'outcome' => 'verify_rejected',
+            'reference' => $reference,
+            'related_id' => (int) ($payment['id'] ?? 0),
+            'purpose' => 'registration',
+            'reason' => (string) ($verified['error'] ?? 'Verification failed.'),
+        ]);
         header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode($verified['error'] ?? 'Verification failed.'));
         exit;
     }
@@ -81,14 +110,31 @@ try {
     $upd->execute([$paystackRef, $reference]);
     if ($upd->rowCount() !== 1) {
         $pdo->rollBack();
+        payment_audit_log('paystack.callback.duplicate', [
+            'outcome' => 'update_race',
+            'reference' => $reference,
+            'related_id' => (int) ($payment['id'] ?? 0),
+            'purpose' => 'registration',
+        ]);
         header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode('Payment was already processed.'));
         exit;
     }
     $pdo->commit();
+    payment_audit_log('paystack.verify.success', [
+        'outcome' => 'paid',
+        'reference' => $reference,
+        'related_id' => (int) ($payment['id'] ?? 0),
+        'purpose' => 'registration',
+    ]);
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
+    payment_audit_log('payment.processing.failed', [
+        'outcome' => 'exception_rolled_back',
+        'reference' => $reference,
+        'purpose' => 'registration',
+    ]);
     header('Location: ' . $registerUrl . '?pay=failed&error=' . rawurlencode('Payment verification failed.'));
     exit;
 }

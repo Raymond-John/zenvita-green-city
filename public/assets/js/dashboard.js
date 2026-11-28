@@ -307,12 +307,16 @@
     var pairing = sumType("Pairing");
     var upgrade = sumType("Upgrade");
     var totalPv = Number(TREE.leftPv || 0) + Number(TREE.rightPv || 0) + Number(TREE.pv || 0);
-    var policy = money.withdrawalPolicy || {};
-    var splitOn = !!(policy.eagleLandsSplit || (policy.eagleLandsEligible && Number(policy.reservePercent) > 0));
+    var WP = window.ZenvitaWithdrawalPolicy;
+    var policy = WP ? WP.resolvePolicy(money.withdrawalPolicy) : (money.withdrawalPolicy || {});
+    var splitOn = WP
+      ? WP.usesEagleSplit(policy)
+      : !!(policy.eagleLandsSplit || (policy.eagleLandsEligible && Number(policy.reservePercent) > 0));
     var reservedHeld = Number(money.reservedHeld);
     if (!isFinite(reservedHeld)) {
-      reservedHeld = splitOn
-        ? Math.round((Number(money.available) || 0) * ((Number(policy.reservePercent) || 60) / 100) * 100) / 100
+      var reservePct = Number(policy.reservePercent);
+      reservedHeld = splitOn && isFinite(reservePct) && reservePct > 0
+        ? Math.round((Number(money.available) || 0) * (reservePct / 100) * 100) / 100
         : 0;
     }
     var eagleMoved = Number(money.eagleLands) || 0;
@@ -641,22 +645,27 @@
     var eagleEl = document.getElementById("eagleLandsBalance");
 
     function policy() {
-      return (wallet().withdrawalPolicy) || {
+      var WP = window.ZenvitaWithdrawalPolicy;
+      if (WP) {
+        return WP.resolvePolicy(wallet().withdrawalPolicy);
+      }
+      return wallet().withdrawalPolicy || {
         isWithdrawDay: false,
-        cashPercent: 40,
-        reservePercent: 60,
+        cashPercent: 100,
+        reservePercent: 0,
         today: "",
         day: "Saturday",
-        eagleLandsEligible: true,
-        eagleLandsSplit: true
+        eagleLandsEligible: false,
+        eagleLandsSplit: false
       };
     }
 
     function reserveTotal(data, p, splitOn) {
       var held = Number(data.reservedHeld);
       if (!isFinite(held)) {
-        held = splitOn
-          ? Math.round((Number(data.available) || 0) * ((Number(p.reservePercent) || 60) / 100) * 100) / 100
+        var reservePct = Number(p.reservePercent);
+        held = splitOn && isFinite(reservePct) && reservePct > 0
+          ? Math.round((Number(data.available) || 0) * (reservePct / 100) * 100) / 100
           : 0;
       }
       var moved = Number(data.eagleLands) || 0;
@@ -668,6 +677,10 @@
     }
 
     function usesEagleSplit() {
+      var WP = window.ZenvitaWithdrawalPolicy;
+      if (WP) {
+        return WP.usesEagleSplit(policy());
+      }
       var p = policy();
       return !!(p.eagleLandsSplit || (p.eagleLandsEligible && Number(p.reservePercent) > 0));
     }
@@ -677,18 +690,22 @@
       if (typeof data.withdrawable === "number") {
         return data.withdrawable;
       }
-      var pct = usesEagleSplit() ? (policy().cashPercent || 40) : 100;
+      var cashPct = Number(policy().cashPercent);
+      var pct = usesEagleSplit() && isFinite(cashPct) && cashPct > 0 ? cashPct : 100;
       return Math.floor((Number(data.available) || 0) * (pct / 100));
     }
 
     function reservedFor(cashAmount) {
+      var WP = window.ZenvitaWithdrawalPolicy;
+      if (WP) {
+        return WP.reservedFor(cashAmount, policy());
+      }
       if (!usesEagleSplit()) {
         return 0;
       }
       var p = policy();
       var cashPercent = Number(p.cashPercent);
       var reservePercent = Number(p.reservePercent);
-      // Treat missing/NaN as unsafe; never coerce 0 → 40/60 via ||.
       if (!isFinite(cashPercent) || !isFinite(reservePercent) || cashPercent <= 0 || reservePercent <= 0) {
         return 0;
       }
@@ -829,9 +846,16 @@
           if (payload.withdrawalPolicy) {
             serverWallet.withdrawalPolicy = payload.withdrawalPolicy;
           }
-          var nextPolicy = serverWallet.withdrawalPolicy || {};
-          serverWallet.reservedHeld = nextPolicy.eagleLandsSplit
-            ? Math.round((Number(payload.available) || 0) * ((Number(nextPolicy.reservePercent) || 60) / 100) * 100) / 100
+          var WP = window.ZenvitaWithdrawalPolicy;
+          var nextPolicy = WP
+            ? WP.resolvePolicy(serverWallet.withdrawalPolicy)
+            : (serverWallet.withdrawalPolicy || {});
+          var nextReservePct = Number(nextPolicy.reservePercent);
+          var nextSplit = WP
+            ? WP.usesEagleSplit(nextPolicy)
+            : !!nextPolicy.eagleLandsSplit;
+          serverWallet.reservedHeld = nextSplit && isFinite(nextReservePct) && nextReservePct > 0
+            ? Math.round((Number(payload.available) || 0) * (nextReservePct / 100) * 100) / 100
             : 0;
           serverWallet.eagleLandsReserve = Math.round(
             ((Number(serverWallet.eagleLands) || 0) + (Number(serverWallet.reservedHeld) || 0)) * 100
@@ -889,16 +913,20 @@
       return;
     }
     var data = wallet();
-    var policy = data.withdrawalPolicy || {};
-    var splitOn = !!(policy.eagleLandsSplit || (policy.eagleLandsEligible && Number(policy.reservePercent) > 0));
+    var WP = window.ZenvitaWithdrawalPolicy;
+    var policy = WP ? WP.resolvePolicy(data.withdrawalPolicy) : (data.withdrawalPolicy || {});
+    var splitOn = WP
+      ? WP.usesEagleSplit(policy)
+      : !!(policy.eagleLandsSplit || (policy.eagleLandsEligible && Number(policy.reservePercent) > 0));
     var eagleMoved = Number(data.eagleLands);
     if (!isFinite(eagleMoved)) {
       eagleMoved = 0;
     }
     var held = Number(data.reservedHeld);
     if (!isFinite(held)) {
-      held = splitOn
-        ? Math.round((Number(data.available) || 0) * ((Number(policy.reservePercent) || 60) / 100) * 100) / 100
+      var reservePctEagle = Number(policy.reservePercent);
+      held = splitOn && isFinite(reservePctEagle) && reservePctEagle > 0
+        ? Math.round((Number(data.available) || 0) * (reservePctEagle / 100) * 100) / 100
         : 0;
     }
     var eagleReserve = Number(data.eagleLandsReserve);
@@ -1175,19 +1203,24 @@
     if (payload.transactions) {
       TRANSACTIONS = payload.transactions;
     }
-    var policy = payload.withdrawalPolicy || {
-      isWithdrawDay: false,
-      cashPercent: 40,
-      reservePercent: 60,
-      today: "",
-      day: "Saturday",
-      eagleLandsEligible: true,
-      eagleLandsSplit: true
-    };
+    var WP = window.ZenvitaWithdrawalPolicy;
+    var policy = WP
+      ? WP.resolvePolicy(payload.withdrawalPolicy)
+      : (payload.withdrawalPolicy || {
+        isWithdrawDay: false,
+        cashPercent: 100,
+        reservePercent: 0,
+        today: "",
+        day: "Saturday",
+        eagleLandsEligible: false,
+        eagleLandsSplit: false
+      });
     var reservedHeld = Number(payload.reservedHeld);
     if (!isFinite(reservedHeld)) {
-      reservedHeld = policy.eagleLandsSplit
-        ? Math.round((Number(payload.available) || 0) * ((Number(policy.reservePercent) || 60) / 100) * 100) / 100
+      var applyReservePct = Number(policy.reservePercent);
+      var applySplit = WP ? WP.usesEagleSplit(policy) : !!policy.eagleLandsSplit;
+      reservedHeld = applySplit && isFinite(applyReservePct) && applyReservePct > 0
+        ? Math.round((Number(payload.available) || 0) * (applyReservePct / 100) * 100) / 100
         : 0;
     }
     var eagleMoved = Number(payload.eagleLands) || 0;

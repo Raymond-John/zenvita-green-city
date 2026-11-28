@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require __DIR__ . '/bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -76,6 +76,7 @@ $pdo->prepare(
     $sponsorHint,
     $sideHint,
 ]);
+$paymentId = (int) $pdo->lastInsertId();
 
 $_SESSION['reg_sponsor'] = $sponsorHint;
 $_SESSION['reg_side'] = $sideHint;
@@ -96,11 +97,30 @@ $init = paystack_request('POST', '/transaction/initialize', [
 ]);
 
 if (empty($init['ok']) || empty($init['data']['authorization_url'])) {
+    // Remove the unfinished pending row so failed init does not look like a live attempt.
+    $pdo->prepare(
+        "DELETE FROM registration_payments
+         WHERE id = ? AND status = 'pending' AND (paystack_reference IS NULL OR paystack_reference = '')"
+    )->execute([$paymentId]);
+    payment_audit_log('paystack.init.failed', [
+        'outcome' => 'init_failed',
+        'reference' => $reference,
+        'related_id' => $paymentId,
+        'purpose' => 'registration',
+    ]);
     json_out([
         'ok' => false,
         'error' => (string) ($init['message'] ?? $init['error'] ?? 'Could not start Paystack payment.'),
     ], 502);
 }
+
+payment_audit_log('paystack.init', [
+    'outcome' => 'initialized',
+    'reference' => $reference,
+    'related_id' => $paymentId,
+    'purpose' => 'registration',
+    'amount_kobo' => $amountKobo,
+]);
 
 json_out([
     'ok' => true,

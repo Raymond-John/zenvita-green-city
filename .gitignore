@@ -2,6 +2,8 @@
 /node_modules
 .env
 .env.backup
+/config/app.local.php
+/config/database.local.php
 .phpunit.result.cache
 Homestead.json
 Homestead.yaml
@@ -22,3 +24,8 @@ yarn-error.log
 Thumbs.db
 Desktop.ini
 *.log
+
+/storage/backups/
+
+/storage/reports/
+

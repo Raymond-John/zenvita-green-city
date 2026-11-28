@@ -6,6 +6,10 @@ start_session();
 
 $reference = trim((string) ($_GET['reference'] ?? $_GET['ref'] ?? ''));
 if ($reference === '') {
+    payment_audit_log('paystack.status.failed', [
+        'outcome' => 'missing_reference',
+        'purpose' => 'registration',
+    ]);
     json_out(['ok' => false, 'error' => 'Missing payment reference.'], 422);
 }
 
@@ -17,7 +21,25 @@ try {
     $payment = $stmt->fetch();
     if (!$payment) {
         $pdo->rollBack();
+        payment_audit_log('paystack.status.failed', [
+            'outcome' => 'payment_missing',
+            'reference' => $reference,
+            'purpose' => 'registration',
+        ]);
         json_out(['ok' => false, 'error' => 'Payment not found.'], 404);
+    }
+
+    if (in_array($payment['status'], ['paid', 'registered', 'funded'], true)
+        && !($payment['status'] === 'pending')) {
+        // Already past pending — treat as duplicate status poll when paid+.
+        if ($payment['status'] === 'paid') {
+            payment_audit_log('paystack.status.duplicate', [
+                'outcome' => 'already_paid',
+                'reference' => $reference,
+                'related_id' => (int) ($payment['id'] ?? 0),
+                'purpose' => 'registration',
+            ]);
+        }
     }
 
     if ($payment['status'] === 'pending' && ($payment['payment_method'] ?? 'paystack') === 'paystack') {
@@ -37,11 +59,30 @@ try {
             if ($upd->rowCount() === 1) {
                 $payment['status'] = 'paid';
                 $payment['paystack_reference'] = (string) ($verified['reference'] ?? $reference);
+                payment_audit_log('paystack.status.paid', [
+                    'outcome' => 'paid',
+                    'reference' => $reference,
+                    'related_id' => (int) ($payment['id'] ?? 0),
+                    'purpose' => 'registration',
+                ]);
             } else {
-                // Another request may have claimed it; reload.
                 $stmt->execute([$reference]);
                 $payment = $stmt->fetch() ?: $payment;
+                payment_audit_log('paystack.status.duplicate', [
+                    'outcome' => 'update_race',
+                    'reference' => $reference,
+                    'related_id' => (int) ($payment['id'] ?? 0),
+                    'purpose' => 'registration',
+                ]);
             }
+        } else {
+            payment_audit_log('paystack.status.failed', [
+                'outcome' => 'verify_rejected',
+                'reference' => $reference,
+                'related_id' => (int) ($payment['id'] ?? 0),
+                'purpose' => 'registration',
+                'reason' => (string) ($verified['error'] ?? 'Verification failed.'),
+            ]);
         }
     }
     $pdo->commit();
@@ -49,6 +90,11 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
+    payment_audit_log('payment.processing.failed', [
+        'outcome' => 'status_db_failed',
+        'reference' => $reference,
+        'purpose' => 'registration',
+    ]);
     json_out(['ok' => false, 'error' => 'Could not verify payment status.'], 500);
 }
 

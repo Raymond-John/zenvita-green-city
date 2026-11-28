@@ -1,27 +1,71 @@
 <?php
 /**
- * Adds store role + stores/orders/notifications tables.
- * Run: php database/migrations/migrate_store_orders.php
+ * Legacy store/orders migrator (CLI only).
+ *
+ * Default: dry-run inspection (no DDL).
+ * Apply:   php database/migrations/migrate_store_orders.php --apply --i-understand-ddl
+ *
+ * Prefer database/migrations/2026_phase1d_schema_readiness.php for full schema readiness.
  */
-require_once dirname(__DIR__, 2) . '/bootstrap/app.php';
+declare(strict_types=1);
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
     exit;
 }
 
+$argvList = array_slice($argv ?? [], 1);
+$apply = in_array('--apply', $argvList, true);
+$confirm = in_array('--i-understand-ddl', $argvList, true);
+
+require_once dirname(__DIR__, 2) . '/bootstrap/app.php';
+
 $pdo = db();
+$dbName = (string) $pdo->query('SELECT DATABASE()')->fetchColumn();
+$expectDb = getenv('ZENVITA_MIGRATE_EXPECT_DB') !== false ? (string) getenv('ZENVITA_MIGRATE_EXPECT_DB') : '';
+
+echo "=== migrate_store_orders (legacy) ===\n";
+echo 'Mode: ' . ($apply ? 'apply' : 'dry-run') . "\n";
+echo "Note: connected database name is not printed.\n";
+
+if ($expectDb !== '' && !hash_equals($expectDb, $dbName)) {
+    fwrite(STDERR, "REFUSED: database identity does not match ZENVITA_MIGRATE_EXPECT_DB.\n");
+    exit(1);
+}
 
 $roleCol = $pdo->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch();
-if ($roleCol && strpos((string) $roleCol['Type'], 'store') === false) {
+$roleNeedsStore = $roleCol && strpos((string) $roleCol['Type'], 'store') === false;
+echo $roleNeedsStore
+    ? "Stage A: users.role would ADD store enum value\n"
+    : "Stage A: users.role already supports store\n";
+
+$tables = ['stores', 'orders', 'order_notifications'];
+foreach ($tables as $name) {
+    $exists = (bool) $pdo->query('SHOW TABLES LIKE ' . $pdo->quote($name))->fetch();
+    echo $exists
+        ? "Stage A: {$name} present\n"
+        : "Stage A: {$name} MISSING (would CREATE)\n";
+}
+
+if (!$apply) {
+    echo "Dry-run complete. No DDL executed. Re-run with --apply --i-understand-ddl to apply.\n";
+    exit(0);
+}
+
+if (!$confirm) {
+    fwrite(STDERR, "REFUSED: apply requires --i-understand-ddl.\n");
+    exit(1);
+}
+
+if ($roleNeedsStore) {
     $pdo->exec("ALTER TABLE users MODIFY role ENUM('member','admin','store') NOT NULL DEFAULT 'member'");
     fwrite(STDOUT, "Updated users.role to include store.\n");
 } else {
     fwrite(STDOUT, "users.role already supports store.\n");
 }
 
-$tables = [
-    'stores' => "CREATE TABLE IF NOT EXISTS stores (
+$createSql = [
+    'stores' => "CREATE TABLE stores (
       id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
       owner_user_id INT UNSIGNED NOT NULL UNIQUE,
       name VARCHAR(120) NOT NULL,
@@ -32,7 +76,7 @@ $tables = [
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT fk_stores_owner FOREIGN KEY (owner_user_id) REFERENCES users(id)
     )",
-    'orders' => "CREATE TABLE IF NOT EXISTS orders (
+    'orders' => "CREATE TABLE orders (
       id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
       reference VARCHAR(40) NOT NULL UNIQUE,
       member_id INT UNSIGNED NOT NULL,
@@ -60,7 +104,7 @@ $tables = [
       CONSTRAINT fk_orders_store FOREIGN KEY (store_id) REFERENCES stores(id),
       CONSTRAINT fk_orders_product FOREIGN KEY (product_id) REFERENCES products(id)
     )",
-    'order_notifications' => "CREATE TABLE IF NOT EXISTS order_notifications (
+    'order_notifications' => "CREATE TABLE order_notifications (
       id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
       store_id INT UNSIGNED NOT NULL,
       order_id INT UNSIGNED NOT NULL,
@@ -71,8 +115,8 @@ $tables = [
     )",
 ];
 
-foreach ($tables as $name => $sql) {
-    $exists = $pdo->query("SHOW TABLES LIKE " . $pdo->quote($name))->fetch();
+foreach ($createSql as $name => $sql) {
+    $exists = (bool) $pdo->query('SHOW TABLES LIKE ' . $pdo->quote($name))->fetch();
     if ($exists) {
         fwrite(STDOUT, "{$name} already exists.\n");
         continue;

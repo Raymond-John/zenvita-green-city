@@ -8,6 +8,10 @@ $reference = trim((string) ($_GET['reference'] ?? $_GET['trxref'] ?? ''));
 $orderUrl = app_root_url() . '/dashboard/order';
 
 if ($reference === '') {
+    payment_audit_log('paystack.verify.failed', [
+        'outcome' => 'missing_reference',
+        'purpose' => 'product_order',
+    ]);
     header('Location: ' . $orderUrl . '?pay=failed&error=' . rawurlencode('Missing payment reference.'));
     exit;
 }
@@ -26,6 +30,11 @@ try {
 
     if (!$order) {
         $pdo->rollBack();
+        payment_audit_log('paystack.verify.failed', [
+            'outcome' => 'order_missing',
+            'reference' => $reference,
+            'purpose' => 'product_order',
+        ]);
         header('Location: ' . $orderUrl . '?pay=failed&error=' . rawurlencode('Order payment record not found.'));
         exit;
     }
@@ -35,6 +44,12 @@ try {
 
     if (($order['payment_status'] ?? '') === 'paid') {
         $pdo->commit();
+        payment_audit_log('paystack.callback.duplicate', [
+            'outcome' => 'already_paid',
+            'reference' => $reference,
+            'related_id' => (int) $order['id'],
+            'purpose' => 'product_order',
+        ]);
         header('Location: ' . $orderUrl . '?pay=success&ref=' . rawurlencode($orderRef));
         exit;
     }
@@ -49,6 +64,13 @@ try {
         $pdo->prepare("UPDATE orders SET payment_status = 'failed' WHERE id = ? AND payment_status <> 'paid'")
             ->execute([(int) $order['id']]);
         $pdo->commit();
+        payment_audit_log('paystack.verify.failed', [
+            'outcome' => 'verify_rejected',
+            'reference' => $reference,
+            'related_id' => (int) $order['id'],
+            'purpose' => 'product_order',
+            'reason' => (string) ($verified['error'] ?? 'Verification failed.'),
+        ]);
         header('Location: ' . $orderUrl . '?pay=failed&error=' . rawurlencode($verified['error'] ?? 'Verification failed.') . '&ref=' . rawurlencode($orderRef));
         exit;
     }
@@ -81,6 +103,20 @@ try {
             'Product order ' . $orderRef . ' paid',
             -$paidAmount,
         ]);
+        payment_audit_log('order.payment.confirmed', [
+            'outcome' => 'paid',
+            'reference' => $reference,
+            'related_id' => (int) $order['id'],
+            'purpose' => 'product_order',
+            'amount_kobo' => $expectedKobo,
+        ]);
+    } else {
+        payment_audit_log('paystack.callback.duplicate', [
+            'outcome' => 'update_race',
+            'reference' => $reference,
+            'related_id' => (int) $order['id'],
+            'purpose' => 'product_order',
+        ]);
     }
 
     $pdo->commit();
@@ -88,6 +124,11 @@ try {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
+    payment_audit_log('payment.processing.failed', [
+        'outcome' => 'db_update_failed',
+        'reference' => $reference,
+        'purpose' => 'product_order',
+    ]);
     header('Location: ' . $orderUrl . '?pay=failed&error=' . rawurlencode('Payment verified but order could not be updated.'));
     exit;
 }

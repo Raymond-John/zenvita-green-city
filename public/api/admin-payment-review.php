@@ -55,14 +55,35 @@ try {
     $upd->execute([$newStatus, $note, (int) $admin['id'], $reference]);
     if ($upd->rowCount() !== 1) {
         $pdo->rollBack();
+        payment_audit_log('transfer.review.failed', [
+            'outcome' => 'already_reviewed',
+            'reference' => $reference,
+            'related_id' => (int) ($payment['id'] ?? 0),
+            'admin_id' => (int) $admin['id'],
+            'action' => $action,
+        ]);
         json_out(['ok' => false, 'error' => 'Payment was already reviewed.'], 409);
     }
 
     $pdo->commit();
+    payment_audit_log(
+        $action === 'approve' ? 'transfer.approved' : 'transfer.rejected',
+        [
+            'outcome' => $newStatus,
+            'reference' => $reference,
+            'related_id' => (int) ($payment['id'] ?? 0),
+            'admin_id' => (int) $admin['id'],
+        ]
+    );
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
+    payment_audit_log('payment.processing.failed', [
+        'outcome' => 'transfer_review_failed',
+        'reference' => $reference,
+        'admin_id' => (int) ($admin['id'] ?? 0),
+    ]);
     json_out(['ok' => false, 'error' => 'Could not update the payment.'], 500);
 }
 

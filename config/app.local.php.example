@@ -1,0 +1,12 @@
+<?php
+
+/**
+ * Copy to config/app.local.php for local XAMPP development.
+ * app.local.php is gitignored and must never be deployed to Hostinger.
+ */
+return [
+    'env' => 'local',
+    'debug' => true,
+    'url' => 'http://localhost/Zenita%20backend/zenvita_green_city',
+    'allow_runtime_ddl' => true,
+];
