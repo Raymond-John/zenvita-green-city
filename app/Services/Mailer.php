@@ -184,11 +184,36 @@ function smtp_expect($socket, array $okCodes): string
     return $response;
 }
 
+/**
+ * Official Cellvigor email footer (logo already in header).
+ */
+function email_brand_footer_html(): string
+{
+    $site = htmlspecialchars(setting('site_name', 'Cellvigor Biorevive LTD'), ENT_QUOTES, 'UTF-8');
+    $support = trim(setting('support_email', ''));
+    $fromEmail = trim(setting('smtp_from_email', ''));
+    $contact = $support !== '' ? $support : $fromEmail;
+    $web = htmlspecialchars(rtrim(app_public_url(), '/'), ENT_QUOTES, 'UTF-8');
+    $year = date('Y');
+    $lines = [
+        '<strong style="color:#163222;font-size:13px;">CELLVIGOR BIOREVIVE LTD</strong>',
+        '<span style="display:block;margin-top:6px;">Official member communication</span>',
+    ];
+    if ($contact !== '' && filter_var($contact, FILTER_VALIDATE_EMAIL)) {
+        $safeContact = htmlspecialchars($contact, ENT_QUOTES, 'UTF-8');
+        $lines[] = '<span style="display:block;margin-top:8px;">Support: <a href="mailto:' . $safeContact . '" style="color:#1f5d3a;text-decoration:none;">' . $safeContact . '</a></span>';
+    }
+    if ($web !== '') {
+        $lines[] = '<span style="display:block;margin-top:4px;"><a href="' . $web . '" style="color:#1f5d3a;text-decoration:none;">' . $web . '</a></span>';
+    }
+    $lines[] = '<span style="display:block;margin-top:10px;color:#8a9a8a;">© ' . $year . ' ' . $site . '. Please do not reply to automated notices unless a reply address is provided.</span>';
+    return implode('', $lines);
+}
+
 function email_layout(string $title, string $innerHtml): string
 {
     $site = htmlspecialchars(setting('site_name', 'Cellvigor Biorevive LTD'), ENT_QUOTES, 'UTF-8');
     $logo = htmlspecialchars(app_public_url('assets/images/cellvigor-logo.png'), ENT_QUOTES, 'UTF-8');
-    $year = date('Y');
     return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         . '<title>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title></head>'
         . '<body style="margin:0;padding:0;background:#f3f6f2;font-family:Segoe UI,Arial,sans-serif;color:#1a2e1a;">'
@@ -196,8 +221,9 @@ function email_layout(string $title, string $innerHtml): string
         . '<tr><td align="center">'
         . '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 28px rgba(26,46,26,.08);">'
         . '<tr><td style="background:linear-gradient(135deg,#1f5d3a,#2f7a4d);padding:24px 28px;text-align:center;">'
-        . '<img src="' . $logo . '" alt="' . $site . '" width="56" height="56" style="display:inline-block;border-radius:12px;background:#fff;padding:6px;">'
-        . '<div style="margin-top:12px;color:#fff;font-size:18px;font-weight:600;letter-spacing:.04em;">' . $site . '</div>'
+        . '<img src="' . $logo . '" alt="' . $site . '" width="64" height="64" style="display:inline-block;border-radius:14px;background:#fff;padding:8px;">'
+        . '<div style="margin-top:12px;color:#fff;font-size:18px;font-weight:600;letter-spacing:.06em;">CELLVIGOR</div>'
+        . '<div style="margin-top:4px;color:rgba(255,255,255,.85);font-size:12px;letter-spacing:.14em;text-transform:uppercase;">Biorevive LTD</div>'
         . '</td></tr>'
         . '<tr><td style="padding:28px 28px 8px;font-size:22px;font-weight:650;color:#163222;">'
         . htmlspecialchars($title, ENT_QUOTES, 'UTF-8')
@@ -205,10 +231,198 @@ function email_layout(string $title, string $innerHtml): string
         . '<tr><td style="padding:8px 28px 28px;font-size:15px;line-height:1.6;color:#334433;">'
         . $innerHtml
         . '</td></tr>'
-        . '<tr><td style="padding:18px 28px;background:#f7faf6;font-size:12px;color:#6b7b6b;text-align:center;">'
-        . '© ' . $year . ' ' . $site . '. This is an automated message.'
+        . '<tr><td style="padding:20px 28px;background:#f7faf6;font-size:12px;color:#6b7b6b;text-align:center;border-top:1px solid #e2ebe2;">'
+        . email_brand_footer_html()
         . '</td></tr>'
         . '</table></td></tr></table></body></html>';
+}
+
+/**
+ * Built-in admin email templates (editable before send).
+ * Placeholders: {{first_name}} {{last_name}} {{full_name}} {{username}} {{member_code}} {{email}} {{site_name}}
+ *
+ * @return array<string, array{code:string,name:string,subject:string,body:string}>
+ */
+function admin_email_templates(): array
+{
+    $site = setting('site_name', 'Cellvigor Biorevive LTD');
+    $templates = [
+        'welcome' => [
+            'code' => 'welcome',
+            'name' => 'Welcome message',
+            'subject' => 'Welcome to ' . $site,
+            'body' => "Hello {{full_name}},\n\nWelcome to CELLVIGOR Biorevive LTD. Your member account ({{member_code}}) is ready.\n\nSign in with your username {{username}} to explore your dashboard, network, and wallet.\n\nWe are glad to have you with us.\n\nWarm regards,\nCELLVIGOR Biorevive LTD",
+        ],
+        'announcement' => [
+            'code' => 'announcement',
+            'name' => 'General announcement',
+            'subject' => 'Announcement from ' . $site,
+            'body' => "Hello {{first_name}},\n\nWe have an important update for our members.\n\n[Write your announcement here.]\n\nThank you for being part of CELLVIGOR Biorevive LTD.\n\nBest regards,\nThe CELLVIGOR Team",
+        ],
+        'payment_reminder' => [
+            'code' => 'payment_reminder',
+            'name' => 'Payment reminder',
+            'subject' => 'Payment reminder — ' . $site,
+            'body' => "Hello {{full_name}},\n\nThis is a friendly reminder regarding a pending payment on your CELLVIGOR account ({{member_code}}).\n\nPlease complete payment at your earliest convenience. If you have already paid, you can ignore this message.\n\nNeed help? Reply to our support email listed in the footer.\n\nThank you,\nCELLVIGOR Biorevive LTD",
+        ],
+        'account_update' => [
+            'code' => 'account_update',
+            'name' => 'Account update',
+            'subject' => 'Account update — ' . $site,
+            'body' => "Hello {{full_name}},\n\nWe are writing to let you know about an update to your CELLVIGOR member account ({{username}}).\n\n[Describe the account update here.]\n\nIf you did not expect this change, contact support immediately.\n\nRegards,\nCELLVIGOR Biorevive LTD",
+        ],
+        'custom' => [
+            'code' => 'custom',
+            'name' => 'Custom message',
+            'subject' => 'Message from ' . $site,
+            'body' => "Hello {{full_name}},\n\n",
+        ],
+    ];
+    return $templates;
+}
+
+function admin_email_template(string $code): ?array
+{
+    $all = admin_email_templates();
+    return $all[$code] ?? null;
+}
+
+/**
+ * Replace {{placeholders}} in template text for a member row.
+ */
+function apply_email_placeholders(string $text, array $user): string
+{
+    $first = trim((string) ($user['first_name'] ?? ''));
+    $last = trim((string) ($user['last_name'] ?? ''));
+    $full = trim($first . ' ' . $last);
+    if ($full === '') {
+        $full = (string) ($user['username'] ?? 'Member');
+    }
+    $map = [
+        '{{first_name}}' => $first !== '' ? $first : 'Member',
+        '{{last_name}}' => $last,
+        '{{full_name}}' => $full,
+        '{{username}}' => (string) ($user['username'] ?? ''),
+        '{{member_code}}' => (string) ($user['member_code'] ?? ''),
+        '{{email}}' => (string) ($user['email'] ?? ''),
+        '{{site_name}}' => setting('site_name', 'Cellvigor Biorevive LTD'),
+    ];
+    return strtr($text, $map);
+}
+
+/**
+ * Convert plain-text admin body into safe HTML paragraphs.
+ */
+function email_body_text_to_html(string $bodyText): string
+{
+    $bodyText = str_replace(["\r\n", "\r"], "\n", $bodyText);
+    $parts = preg_split("/\n{2,}/", trim($bodyText)) ?: [];
+    if ($parts === [] || (count($parts) === 1 && trim($parts[0]) === '')) {
+        return '<p style="margin:0;">(No message content)</p>';
+    }
+    $html = '';
+    foreach ($parts as $part) {
+        $safe = nl2br(htmlspecialchars(trim($part), ENT_QUOTES, 'UTF-8'), false);
+        $html .= '<p style="margin:0 0 14px;">' . $safe . '</p>';
+    }
+    return $html;
+}
+
+/**
+ * Build a branded HTML email from an editable title + plain-text body.
+ */
+function compose_branded_member_email(string $title, string $bodyText, array $user): string
+{
+    $title = apply_email_placeholders($title, $user);
+    $body = apply_email_placeholders($bodyText, $user);
+    return email_layout($title, email_body_text_to_html($body));
+}
+
+/**
+ * Send one branded admin email to a member. Does not create wallets or alter commissions.
+ *
+ * @return array{ok:bool,error?:string}
+ */
+function send_admin_member_email(array $user, string $subject, string $title, string $bodyText): array
+{
+    $email = trim((string) ($user['email'] ?? ''));
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return ['ok' => false, 'error' => 'Member has no valid email address.'];
+    }
+    $subject = trim(apply_email_placeholders($subject, $user));
+    if ($subject === '') {
+        return ['ok' => false, 'error' => 'Email subject is required.'];
+    }
+    $title = trim($title) !== '' ? $title : $subject;
+    $html = compose_branded_member_email($title, $bodyText, $user);
+    return send_mail($email, $subject, $html);
+}
+
+/**
+ * Ensure admin email send-log table exists (runtime DDL gated).
+ */
+function ensure_admin_email_log_schema(?PDO $pdo = null): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $pdo = $pdo ?: db();
+    $exists = (bool) $pdo->query("SHOW TABLES LIKE 'admin_email_log'")->fetch();
+    if (!$exists) {
+        apply_runtime_ddl('SCHEMA_ADMIN_EMAIL_LOG_MISSING', static function () use ($pdo): void {
+            $pdo->exec(
+                "CREATE TABLE admin_email_log (
+                    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    admin_id INT UNSIGNED NOT NULL,
+                    user_id INT UNSIGNED NULL,
+                    template_code VARCHAR(40) NOT NULL DEFAULT 'custom',
+                    recipient_email VARCHAR(120) NOT NULL,
+                    subject VARCHAR(255) NOT NULL,
+                    body_text MEDIUMTEXT NOT NULL,
+                    status ENUM('sent','failed') NOT NULL DEFAULT 'sent',
+                    error_message VARCHAR(255) NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY idx_admin_email_log_admin (admin_id),
+                    KEY idx_admin_email_log_user (user_id),
+                    KEY idx_admin_email_log_created (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            );
+        });
+    }
+    $done = true;
+}
+
+function log_admin_email_send(
+    PDO $pdo,
+    int $adminId,
+    ?int $userId,
+    string $templateCode,
+    string $recipientEmail,
+    string $subject,
+    string $bodyText,
+    bool $ok,
+    string $error = ''
+): void {
+    try {
+        ensure_admin_email_log_schema($pdo);
+        $pdo->prepare(
+            'INSERT INTO admin_email_log
+                (admin_id, user_id, template_code, recipient_email, subject, body_text, status, error_message)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        )->execute([
+            $adminId,
+            $userId,
+            $templateCode !== '' ? $templateCode : 'custom',
+            $recipientEmail,
+            mb_substr($subject, 0, 255),
+            $bodyText,
+            $ok ? 'sent' : 'failed',
+            $ok ? null : mb_substr($error, 0, 255),
+        ]);
+    } catch (Throwable $e) {
+        // Logging must not block delivery results.
+    }
 }
 
 function send_wallet_funded_email(array $user, float $amount, string $reference, string $note, float $newBalance): array

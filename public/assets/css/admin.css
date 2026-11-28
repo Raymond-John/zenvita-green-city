@@ -89,3 +89,23 @@ body.app-body .package-desc {
   margin: 0.35rem 0 0.55rem;
   white-space: pre-wrap;
 }
+
+.email-preview-box {
+  border: 1px solid var(--line, #dfe6df);
+  border-radius: 14px;
+  background: #f7faf6;
+  padding: 0.85rem;
+  min-height: 220px;
+  overflow: auto;
+  max-height: 520px;
+}
+.email-preview-box iframe {
+  width: 100%;
+  min-height: 420px;
+  border: 0;
+  background: #fff;
+  border-radius: 10px;
+}
+#emailMembers {
+  min-height: 180px;
+}

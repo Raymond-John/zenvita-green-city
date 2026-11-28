@@ -38,6 +38,7 @@ return [
         'POST /api/admin-payment-review.php' => 'Approve/reject transfer receipts',
         'POST /api/admin-pairing.php' => 'Trigger pairing',
         'POST /api/admin-landing-feature.php' => 'Homepage features',
+        'GET|POST /api/admin-email.php' => 'Compose/send branded member emails',
     ],
     'store' => [
         'GET  /api/store.php' => 'Store dashboard',

@@ -35,6 +35,7 @@ ensure_product_landing_columns();
         <a class="sidebar-link" href="commissions"><i class="bi bi-cash-stack"></i> Commissions</a>
         <a class="sidebar-link" href="withdrawals"><i class="bi bi-bank"></i> Withdrawals</a>
         <a class="sidebar-link" href="transactions"><i class="bi bi-receipt"></i> Transactions</a>
+        <a class="sidebar-link" href="emails"><i class="bi bi-envelope"></i> Emails</a>
         <a class="sidebar-link" href="settings"><i class="bi bi-gear"></i> Settings</a>
       </nav>
       <div class="sidebar-foot"><a class="sidebar-link" href="login" data-logout><i class="bi bi-box-arrow-left"></i> Logout</a></div>

@@ -1398,6 +1398,269 @@
     });
   }
 
+  function initEmails() {
+    var form = document.getElementById("adminEmailForm");
+    if (!form) {
+      return;
+    }
+    var templateSelect = document.getElementById("emailTemplate");
+    var audienceSelect = document.getElementById("emailAudience");
+    var memberSelect = document.getElementById("emailMembers");
+    var memberSearch = document.getElementById("emailMemberSearch");
+    var memberWrap = document.getElementById("emailMemberWrap");
+    var subjectInput = document.getElementById("emailSubject");
+    var titleInput = document.getElementById("emailTitle");
+    var bodyInput = document.getElementById("emailBody");
+    var previewBox = document.getElementById("emailPreview");
+    var previewBtn = document.getElementById("emailPreviewBtn");
+    var sendBtn = document.getElementById("emailSendBtn");
+    var errEl = document.getElementById("emailFormError");
+    var okEl = document.getElementById("emailFormSuccess");
+    var smtpBanner = document.getElementById("emailSmtpBanner");
+    var recentBody = document.getElementById("emailRecentBody");
+    var placeholderHelp = document.getElementById("emailPlaceholderHelp");
+    var state = { templates: [], members: [], recent: [] };
+
+    function setMsg(error, success) {
+      if (errEl) {
+        errEl.textContent = error || "";
+      }
+      if (okEl) {
+        okEl.hidden = !success;
+        okEl.textContent = success || "";
+      }
+    }
+
+    function selectedMembers() {
+      return Array.prototype.slice.call(memberSelect.selectedOptions || []).map(function (opt) {
+        return Number(opt.value);
+      }).filter(function (id) {
+        return id > 0;
+      });
+    }
+
+    function paintMembers(filter) {
+      var q = String(filter || "").trim().toLowerCase();
+      var selected = {};
+      selectedMembers().forEach(function (id) {
+        selected[id] = true;
+      });
+      var rows = state.members.filter(function (m) {
+        if (!q) {
+          return true;
+        }
+        return [m.name, m.username, m.email, m.memberCode].join(" ").toLowerCase().indexOf(q) !== -1;
+      });
+      memberSelect.innerHTML = rows.map(function (m) {
+        var label = (m.name || m.username || "Member") + " · " + (m.email || "") + (m.memberCode ? " · " + m.memberCode : "");
+        return '<option value="' + m.id + '"' + (selected[m.id] ? " selected" : "") + ">" + Z.escapeHtml(label) + "</option>";
+      }).join("");
+    }
+
+    function applyTemplate(code) {
+      var tpl = state.templates.filter(function (t) {
+        return t.code === code;
+      })[0];
+      if (!tpl) {
+        return;
+      }
+      subjectInput.value = tpl.subject || "";
+      titleInput.value = tpl.subject || "";
+      bodyInput.value = tpl.body || "";
+    }
+
+    function paintRecent() {
+      if (!recentBody) {
+        return;
+      }
+      if (!state.recent.length) {
+        recentBody.innerHTML = '<tr><td colspan="4">No sends logged yet.</td></tr>';
+        return;
+      }
+      recentBody.innerHTML = state.recent.map(function (row) {
+        return "<tr><td>" + Z.escapeHtml(row.createdAt || "") + "</td><td>" + Z.escapeHtml(row.email || "") + "</td><td>" + Z.escapeHtml(row.subject || "") + '</td><td><span class="' + Z.statusClass(row.status === "sent" ? "Approved" : "Rejected") + '">' + Z.escapeHtml(row.status || "") + "</span></td></tr>";
+      }).join("");
+    }
+
+    function sampleUser() {
+      var ids = selectedMembers();
+      if (ids.length) {
+        var hit = state.members.filter(function (m) {
+          return m.id === ids[0];
+        })[0];
+        if (hit) {
+          return hit;
+        }
+      }
+      return state.members[0] || {
+        firstName: "Ada",
+        lastName: "Member",
+        name: "Ada Member",
+        username: "member",
+        memberCode: "ZGV00000",
+        email: "member@example.com"
+      };
+    }
+
+    function fillPlaceholders(text, user) {
+      var first = user.firstName || (user.name || "").split(" ")[0] || "Member";
+      var last = user.lastName || "";
+      var full = user.name || (first + " " + last).trim() || "Member";
+      return String(text || "")
+        .replace(/\{\{first_name\}\}/g, first)
+        .replace(/\{\{last_name\}\}/g, last)
+        .replace(/\{\{full_name\}\}/g, full)
+        .replace(/\{\{username\}\}/g, user.username || "")
+        .replace(/\{\{member_code\}\}/g, user.memberCode || "")
+        .replace(/\{\{email\}\}/g, user.email || "")
+        .replace(/\{\{site_name\}\}/g, (office.settings && office.settings.siteName) || "Cellvigor Biorevive LTD");
+    }
+
+    function bodyToHtml(text) {
+      var parts = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split(/\n{2,}/);
+      if (!parts.length || (parts.length === 1 && !parts[0].trim())) {
+        return "<p>(No message content)</p>";
+      }
+      return parts.map(function (part) {
+        return "<p style=\"margin:0 0 14px;\">" + Z.escapeHtml(part.trim()).replace(/\n/g, "<br>") + "</p>";
+      }).join("");
+    }
+
+    function renderPreview() {
+      var user = sampleUser();
+      var title = fillPlaceholders(titleInput.value || subjectInput.value || "Message", user);
+      var bodyHtml = bodyToHtml(fillPlaceholders(bodyInput.value, user));
+      var site = (office.settings && office.settings.siteName) || "Cellvigor Biorevive LTD";
+      var support = (office.settings && office.settings.supportEmail) || (office.settings && office.settings.smtpFromEmail) || "";
+      var html = '<!DOCTYPE html><html><body style="margin:0;background:#f3f6f2;font-family:Segoe UI,Arial,sans-serif;color:#1a2e1a;">'
+        + '<table width="100%" cellspacing="0" cellpadding="0" style="padding:16px;"><tr><td align="center">'
+        + '<table width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#fff;border-radius:14px;overflow:hidden;">'
+        + '<tr><td style="background:linear-gradient(135deg,#1f5d3a,#2f7a4d);padding:20px;text-align:center;color:#fff;">'
+        + '<img src="../assets/images/cellvigor-logo.png" alt="" width="56" height="56" style="border-radius:12px;background:#fff;padding:6px;">'
+        + '<div style="margin-top:10px;font-weight:600;letter-spacing:.06em;">CELLVIGOR</div>'
+        + '<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.9;">Biorevive LTD</div></td></tr>'
+        + '<tr><td style="padding:22px 22px 8px;font-size:20px;font-weight:650;color:#163222;">' + Z.escapeHtml(title) + "</td></tr>"
+        + '<tr><td style="padding:8px 22px 22px;font-size:14px;line-height:1.6;color:#334433;">' + bodyHtml + "</td></tr>"
+        + '<tr><td style="padding:16px 22px;background:#f7faf6;font-size:12px;color:#6b7b6b;text-align:center;border-top:1px solid #e2ebe2;">'
+        + "<strong style=\"color:#163222;\">CELLVIGOR BIOREVIVE LTD</strong><br>Official member communication"
+        + (support ? "<br>Support: " + Z.escapeHtml(support) : "")
+        + "<br>© " + new Date().getFullYear() + " " + Z.escapeHtml(site)
+        + "</td></tr></table></td></tr></table></body></html>";
+      previewBox.innerHTML = "";
+      var frame = document.createElement("iframe");
+      frame.title = "Email preview";
+      previewBox.appendChild(frame);
+      var doc = frame.contentDocument || frame.contentWindow.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+    }
+
+    function toggleAudience() {
+      var all = audienceSelect.value === "all_active";
+      if (memberWrap) {
+        memberWrap.hidden = all;
+      }
+    }
+
+    templateSelect.addEventListener("change", function () {
+      applyTemplate(templateSelect.value);
+    });
+    audienceSelect.addEventListener("change", toggleAudience);
+    if (memberSearch) {
+      memberSearch.addEventListener("input", function () {
+        paintMembers(memberSearch.value);
+      });
+    }
+    if (previewBtn) {
+      previewBtn.addEventListener("click", function () {
+        renderPreview();
+      });
+    }
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      setMsg("", "");
+      var audience = audienceSelect.value;
+      var userIds = selectedMembers();
+      if (audience !== "all_active" && !userIds.length) {
+        setMsg("Select at least one member, or choose all active members.", "");
+        return;
+      }
+      sendBtn.disabled = true;
+      fetch("../api/admin-email.php", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          template: templateSelect.value,
+          audience: audience,
+          userIds: userIds,
+          subject: subjectInput.value.trim(),
+          title: titleInput.value.trim(),
+          body: bodyInput.value
+        })
+      }).then(function (res) {
+        return res.json().then(function (data) {
+          return { status: res.status, data: data };
+        });
+      }).then(function (result) {
+        sendBtn.disabled = false;
+        if (!result.data || !result.data.ok) {
+          setMsg((result.data && (result.data.error || result.data.message)) || "Send failed.", "");
+          return;
+        }
+        setMsg("", result.data.message || "Email sent.");
+        return loadEmailOffice(true);
+      }).catch(function () {
+        sendBtn.disabled = false;
+        setMsg("Could not reach the email API.", "");
+      });
+    });
+
+    function loadEmailOffice(keepForm) {
+      return fetch("../api/admin-email.php", { credentials: "same-origin" })
+        .then(function (res) {
+          if (res.status === 401 || res.status === 403) {
+            window.location.href = "login";
+            return null;
+          }
+          return res.json();
+        })
+        .then(function (data) {
+          if (!data || !data.ok) {
+            setMsg((data && data.error) || "Could not load email tools.", "");
+            return;
+          }
+          state.templates = data.templates || [];
+          state.members = data.members || [];
+          state.recent = data.recent || [];
+          if (smtpBanner) {
+            smtpBanner.hidden = !!data.smtpConfigured;
+          }
+          if (placeholderHelp) {
+            placeholderHelp.innerHTML = "Available placeholders: " + (data.placeholders || []).map(function (p) {
+              return "<code>" + Z.escapeHtml(p) + "</code>";
+            }).join(" ");
+          }
+          var previous = templateSelect.value;
+          templateSelect.innerHTML = state.templates.map(function (tpl) {
+            return '<option value="' + Z.escapeHtml(tpl.code) + '">' + Z.escapeHtml(tpl.name) + "</option>";
+          }).join("");
+          if (!keepForm) {
+            applyTemplate(state.templates[0] ? state.templates[0].code : "custom");
+          } else if (previous) {
+            templateSelect.value = previous;
+          }
+          paintMembers(memberSearch ? memberSearch.value : "");
+          paintRecent();
+          toggleAudience();
+        });
+    }
+
+    loadEmailOffice(false);
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll(".avatar").forEach(function (node) {
       node.innerHTML = window.Zenvita.humanFace();
@@ -1429,6 +1692,7 @@
         initSettings();
         initPayments();
         initProductsAdmin();
+        initEmails();
         var needsStores = document.getElementById("adminStoreBody") || document.getElementById("adminOrderBody");
         if (!needsStores) {
           return;
